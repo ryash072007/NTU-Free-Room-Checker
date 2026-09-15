@@ -94,9 +94,9 @@ at 10:59 does. A physical room with any applicable unparsed day or time is exclu
 from free-room results. Omitting `--week` asks the conservative question across
 all meeting patterns, not for a specific calendar date.
 
-No calendar-date-to-teaching-week mapping is implemented. Recess weeks, holidays,
-and term dates require authoritative calendar configuration before date queries
-can be safe.
+Calendar-date-to-teaching-week mapping is implemented separately using the
+official AY2026-27 PDF configuration. See `docs/academic-calendar.md`; normalized
+queries remain conservative for recess, examinations, holidays, and exceptions.
 
 ## Commands
 

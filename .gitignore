@@ -187,3 +187,4 @@ debug/
 *.db-shm
 *.db-wal
 playwright-report/
+tmp/

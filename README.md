@@ -132,7 +132,7 @@ No HTTP API or frontend is included yet.
 ## Academic calendar dates
 
 AY2026-27 calendar-date resolution is available for regular timetable queries.
-The configuration, full week mapping, public holidays, Special Term caveat, and
+The configuration, full week mapping, public holidays, Special Term mapping, and
 non-teaching-period safety behavior are documented in
 [academic-calendar.md](docs/academic-calendar.md).
 
