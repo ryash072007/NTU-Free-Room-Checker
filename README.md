@@ -127,4 +127,22 @@ python -m ntu_room_checker room-schedule "LHN-TR+15" --academic-year 2026 --seme
 python -m ntu_room_checker free-rooms --academic-year 2026 --semester 1 --day MON --time 1430 --duration 120 --week 3
 ```
 
-No HTTP API, frontend, or calendar-date mapping is included yet.
+No HTTP API or frontend is included yet.
+
+## Academic calendar dates
+
+AY2026-27 calendar-date resolution is available for regular timetable queries.
+The configuration, full week mapping, public holidays, Special Term caveat, and
+non-teaching-period safety behavior are documented in
+[academic-calendar.md](docs/academic-calendar.md).
+
+```powershell
+python -m ntu_room_checker calendar-date 2026-09-15
+python -m ntu_room_checker room-schedule "LHN-TR+15" --date 2026-09-15
+python -m ntu_room_checker free-rooms --date 2026-09-15 --time 1430 --duration 120
+python -m ntu_room_checker room-availability "LHN-TR+15" --date 2026-09-14 --time 1430 --duration 120
+```
+
+Recess, revision/examination, orientation, outside-term, missing-semester, and
+unknown-room cases return explicit uncertainty statuses. They never translate an
+empty regular timetable into a claim that all rooms are physically free.
