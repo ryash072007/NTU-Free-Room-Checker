@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=_positive_int, default=8000)
     serve.add_argument("--db", type=Path)
+    serve.add_argument("--static-dir", type=Path, help="Directory containing built static frontend")
     scrape = commands.add_parser(
         "scrape", help="Scrape NTU public class schedules"
     )
@@ -136,6 +137,8 @@ def main() -> None:
         settings = ApiSettings.from_environment()
         if args.db is not None:
             settings = replace(settings, database_path=args.db)
+        if args.static_dir is not None:
+            settings = replace(settings, static_dir=args.static_dir)
         uvicorn.run(create_app(settings), host=args.host, port=args.port)
         return
     if args.command == "profile":
