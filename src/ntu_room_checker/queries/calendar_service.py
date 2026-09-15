@@ -150,6 +150,10 @@ class CalendarTimetableService:
                 resolution.academic_year, resolution.semester,
                 teaching_week=resolution.teaching_week,
             )
+            schedules = self.queries.get_room_schedules(
+                resolution.academic_year, resolution.semester,
+                resolution.day_of_week, teaching_week=resolution.teaching_week,
+            )
         except ValueError as error:
             return DateFreeRoomsResult(
                 resolution, AvailabilityStatus.NORMALIZED_TIMETABLE_UNAVAILABLE,
@@ -165,7 +169,9 @@ class CalendarTimetableService:
                         ("The room has a meeting with an unparsed day or time.",),
                     ))
                 continue
-            availability = self._evaluate_room(room, resolution, start, end)
+            availability = self._evaluate_room(
+                room, resolution, start, end, meetings=schedules.get(room, ())
+            )
             if availability.status == AvailabilityStatus.FREE:
                 free.append(FreeRoom(room, start, end, availability.free_until))
             elif availability.status == AvailabilityStatus.UNCERTAIN and include_uncertain:
@@ -220,12 +226,14 @@ class CalendarTimetableService:
         return self._evaluate_room(normalized, resolution, start, end)
 
     def _evaluate_room(
-        self, room: str, resolution: DateResolution, start: int, end: int
+        self, room: str, resolution: DateResolution, start: int, end: int,
+        *, meetings: tuple[RoomMeeting, ...] | list[RoomMeeting] | None = None,
     ) -> RoomAvailabilityResult:
-        meetings = self.queries.get_room_schedule(
-            room, resolution.academic_year, resolution.semester,
-            resolution.day_of_week, teaching_week=resolution.teaching_week,
-        )
+        if meetings is None:
+            meetings = self.queries.get_room_schedule(
+                room, resolution.academic_year, resolution.semester,
+                resolution.day_of_week, teaching_week=resolution.teaching_week,
+            )
         evaluated = tuple(
             EvaluatedMeeting(meeting, self.policy.evaluate_meeting(
                 resolution, meeting.start_minute, meeting.end_minute

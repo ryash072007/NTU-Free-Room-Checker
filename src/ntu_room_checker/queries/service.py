@@ -128,6 +128,41 @@ class TimetableQueries:
         ).fetchall()
         return [self._meeting(row) for row in rows]
 
+    def get_room_schedules(
+        self,
+        academic_year: str | int,
+        semester: str | int,
+        day_of_week: str | int,
+        *,
+        teaching_week: int | None = None,
+    ) -> dict[str, list[RoomMeeting]]:
+        """Load all parsed physical-room schedules for a day in one query."""
+        run_id = self._normalization_run(academic_year, semester)
+        day = day_number(day_of_week)
+        week_sql, week_args = self._week_sql(teaching_week)
+        rows = self.connection.execute(
+            f"""SELECT r.venue_display,m.id,cc.course_code,cc.course_title,
+                       cc.index_number,cc.class_type,cc.group_name,m.day_of_week,
+                       m.start_minute,m.end_minute,m.venue_normalized,m.remark_raw,
+                       m.week_parse_status,
+                       (SELECT group_concat(teaching_week, ',') FROM
+                          (SELECT teaching_week FROM meeting_weeks
+                           WHERE meeting_id=m.id ORDER BY teaching_week)) week_numbers,
+                       (SELECT COUNT(*) FROM meeting_source_entries WHERE meeting_id=m.id) source_count
+                FROM rooms r JOIN class_meetings m ON m.room_id=r.id
+                JOIN canonical_classes cc ON cc.id=m.canonical_class_id
+                WHERE r.normalization_run_id=? AND r.venue_type='physical_room'
+                  AND cc.normalization_run_id=? AND m.day_of_week=?
+                  AND m.time_parse_status='parsed' AND {week_sql}
+                ORDER BY r.venue_display,m.start_minute,m.end_minute,
+                         cc.course_code,cc.index_number,m.id""",
+            (run_id, run_id, day, *week_args),
+        ).fetchall()
+        schedules: dict[str, list[RoomMeeting]] = {}
+        for row in rows:
+            schedules.setdefault(str(row["venue_display"]), []).append(self._meeting(row))
+        return schedules
+
     @staticmethod
     def _meeting(row: sqlite3.Row) -> RoomMeeting:
         weeks = tuple(int(value) for value in (row["week_numbers"] or "").split(",") if value)
