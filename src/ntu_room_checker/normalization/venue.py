@@ -11,6 +11,11 @@ OTHER_VALUES = {"OVERSEAS"}
 
 def normalize_venue(raw: str) -> VenueResult:
     normalized = re.sub(r"\s+", " ", raw.strip()).upper()
+    # Sixteen source rows wrap otherwise conventional venue identifiers in a
+    # balanced pair of quotes (for example, "LT1A"). Treat the quotes as source
+    # formatting while retaining the untouched value in venue_raw.
+    if len(normalized) >= 2 and normalized.startswith('"') and normalized.endswith('"'):
+        normalized = normalized[1:-1].strip()
     if not normalized:
         venue_type = "none"
     elif normalized in ONLINE_VALUES:
