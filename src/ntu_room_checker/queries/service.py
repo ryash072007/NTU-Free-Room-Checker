@@ -50,6 +50,40 @@ class TimetableQueries:
             (run_id, normalized),
         ).fetchone() is not None
 
+    def physical_rooms(
+        self, academic_year: str | int, semester: str | int
+    ) -> list[str]:
+        run_id = self._normalization_run(academic_year, semester)
+        return [
+            str(row[0])
+            for row in self.connection.execute(
+                """SELECT venue_display FROM rooms
+                   WHERE normalization_run_id=? AND venue_type='physical_room'
+                   ORDER BY venue_display""",
+                (run_id,),
+            )
+        ]
+
+    def rooms_with_unparsed_meetings(
+        self, academic_year: str | int, semester: str | int,
+        *, teaching_week: int | None = None,
+    ) -> set[str]:
+        run_id = self._normalization_run(academic_year, semester)
+        week_sql, week_args = self._week_sql(teaching_week)
+        return {
+            str(row[0])
+            for row in self.connection.execute(
+                f"""SELECT DISTINCT r.venue_display FROM rooms r
+                    JOIN class_meetings m ON m.room_id=r.id
+                    JOIN canonical_classes cc ON cc.id=m.canonical_class_id
+                    WHERE r.normalization_run_id=? AND r.venue_type='physical_room'
+                      AND cc.normalization_run_id=?
+                      AND (m.day_parse_status!='parsed' OR m.time_parse_status!='parsed')
+                      AND {week_sql}""",
+                (run_id, run_id, *week_args),
+            )
+        }
+
     @staticmethod
     def _week_sql(teaching_week: int | None, alias: str = "m") -> tuple[str, tuple[int, ...]]:
         if teaching_week is None:

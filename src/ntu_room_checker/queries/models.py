@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from ntu_room_checker.calendar.policy import MeetingApplicabilityResult
+
 
 @dataclass(frozen=True, slots=True)
 class RoomMeeting:
@@ -40,3 +42,16 @@ class FreeRoom:
         if self.free_until is None:
             return None
         return self.free_until - self.requested_start
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluatedMeeting:
+    meeting: RoomMeeting
+    applicability: MeetingApplicabilityResult
+
+
+@dataclass(frozen=True, slots=True)
+class UncertainRoom:
+    room: str
+    reason_codes: tuple[str, ...]
+    reasons: tuple[str, ...]

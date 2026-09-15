@@ -1,14 +1,29 @@
-"""Calendar-aware facade over the existing normalized timetable queries."""
+"""Calendar-policy-aware facade over normalized timetable queries."""
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from enum import StrEnum
 from pathlib import Path
 
-from ntu_room_checker.calendar import CalendarResolver, default_resolver
+from ntu_room_checker.calendar import CalendarPolicyEngine, CalendarResolver, default_resolver
 from ntu_room_checker.calendar.models import DateResolution
+from ntu_room_checker.calendar.policy import ApplicabilityStatus, DatePolicyResult, TimetableAuthority
 from ntu_room_checker.normalization.venue import normalize_venue
-from ntu_room_checker.queries.models import FreeRoom, RoomMeeting
-from ntu_room_checker.queries.service import TimetableQueries
+from ntu_room_checker.queries.models import (
+    EvaluatedMeeting, FreeRoom, OccupiedInterval, RoomMeeting, UncertainRoom,
+)
+from ntu_room_checker.queries.service import TimetableQueries, overlaps
+
+
+class AvailabilityStatus(StrEnum):
+    FREE = "free"
+    OCCUPIED = "occupied"
+    UNCERTAIN = "uncertain"
+    TIMETABLE_NOT_APPLICABLE = "regular_timetable_not_applicable"
+    TIMETABLE_NOT_AUTHORITATIVE = "regular_timetable_not_authoritative"
+    TIMETABLE_UNAVAILABLE = "regular_timetable_unavailable"
+    NORMALIZED_TIMETABLE_UNAVAILABLE = "normalized_timetable_unavailable"
+    UNKNOWN_ROOM = "unknown_room"
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +32,7 @@ class DateScheduleResult:
     status: str
     reason: str
     meetings: tuple[RoomMeeting, ...]
+    evaluated_meetings: tuple[EvaluatedMeeting, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +43,7 @@ class DateFreeRoomsResult:
     requested_start: int
     requested_end: int
     rooms: tuple[FreeRoom, ...]
+    uncertain_rooms: tuple[UncertainRoom, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,12 +56,18 @@ class RoomAvailabilityResult:
     requested_end: int
     is_free: bool | None
     free_until: int | None
+    occupied_intervals: tuple[OccupiedInterval, ...] = ()
+    uncertainty_reason_codes: tuple[str, ...] = ()
+    uncertainty_reasons: tuple[str, ...] = ()
+    evaluated_meetings: tuple[EvaluatedMeeting, ...] = ()
 
 
 class CalendarTimetableService:
-    def __init__(self, db_path: Path, resolver: CalendarResolver | None = None) -> None:
+    def __init__(self, db_path: Path, resolver: CalendarResolver | None = None,
+                 policy: CalendarPolicyEngine | None = None) -> None:
         self.queries = TimetableQueries(db_path)
         self.resolver = resolver or default_resolver()
+        self.policy = policy or CalendarPolicyEngine()
 
     def close(self) -> None:
         self.queries.close()
@@ -56,18 +79,19 @@ class CalendarTimetableService:
         self.close()
 
     @staticmethod
-    def _unavailable_reason(resolution: DateResolution) -> str:
-        return (
-            f"Regular timetable applicability is not established for "
-            f"{resolution.period_type.value}; room availability is unknown."
-        )
+    def _status_for_date_policy(policy: DatePolicyResult) -> AvailabilityStatus:
+        return {
+            TimetableAuthority.NOT_APPLICABLE: AvailabilityStatus.TIMETABLE_NOT_APPLICABLE,
+            TimetableAuthority.NOT_AUTHORITATIVE: AvailabilityStatus.TIMETABLE_NOT_AUTHORITATIVE,
+            TimetableAuthority.UNAVAILABLE: AvailabilityStatus.TIMETABLE_UNAVAILABLE,
+        }.get(policy.authority, AvailabilityStatus.FREE)
 
     def get_room_schedule_for_date(self, room: str, value: date | str) -> DateScheduleResult:
         resolution = self.resolver.resolve(value)
-        if not resolution.regular_timetable_applicable:
+        date_policy = self.policy.evaluate_date(resolution)
+        if date_policy.authority != TimetableAuthority.AUTHORITATIVE:
             return DateScheduleResult(
-                resolution, "regular_timetable_not_applicable",
-                self._unavailable_reason(resolution), (),
+                resolution, self._status_for_date_policy(date_policy), date_policy.reason, (), ()
             )
         try:
             meetings = self.queries.get_room_schedule(
@@ -76,84 +100,201 @@ class CalendarTimetableService:
             )
         except ValueError as error:
             return DateScheduleResult(
-                resolution, "normalized_timetable_unavailable", str(error), (),
+                resolution, AvailabilityStatus.NORMALIZED_TIMETABLE_UNAVAILABLE,
+                str(error), (), (),
             )
-        if resolution.exceptions:
+        evaluated = tuple(
+            EvaluatedMeeting(meeting, self.policy.evaluate_meeting(
+                resolution, meeting.start_minute, meeting.end_minute
+            ))
+            for meeting in meetings
+        )
+        if any(item.applicability.status == ApplicabilityStatus.UNCERTAIN for item in evaluated):
             return DateScheduleResult(
-                resolution,
-                "ok_with_calendar_exception",
-                "The date has a scoped calendar exception that is not automatically applied to timetable rows.",
-                tuple(meetings),
+                resolution, AvailabilityStatus.UNCERTAIN,
+                "One or more meetings have uncertain calendar-exception applicability.",
+                tuple(meetings), evaluated,
             )
-        return DateScheduleResult(resolution, "ok", "", tuple(meetings))
+        if any(item.applicability.applied_exceptions for item in evaluated):
+            return DateScheduleResult(
+                resolution, "ok_with_adjustments",
+                "One or more effective meeting intervals were adjusted by calendar policy.",
+                tuple(meetings), evaluated,
+            )
+        return DateScheduleResult(resolution, "ok", "", tuple(meetings), evaluated)
 
     def find_free_rooms_for_datetime(
-        self, value: datetime | str, duration_minutes: int
+        self, value: datetime | str, duration_minutes: int, *, include_uncertain: bool = False
     ) -> DateFreeRoomsResult:
-        instant = datetime.fromisoformat(value) if isinstance(value, str) else value
-        resolution = self.resolver.resolve(instant.date())
-        start = instant.hour * 60 + instant.minute
-        end = start + duration_minutes
-        if duration_minutes <= 0 or end > 24 * 60:
-            raise ValueError("requested interval must be positive and remain within one day")
-        if not resolution.regular_timetable_applicable:
+        _, resolution, start, end = self._request_context(value, duration_minutes)
+        date_policy = self.policy.evaluate_date(resolution)
+        if date_policy.authority != TimetableAuthority.AUTHORITATIVE:
+            uncertain: tuple[UncertainRoom, ...] = ()
+            if include_uncertain and resolution.academic_year is not None and resolution.semester:
+                try:
+                    uncertain = tuple(
+                        UncertainRoom(room, (date_policy.reason_code,), (date_policy.reason,))
+                        for room in self.queries.physical_rooms(
+                            resolution.academic_year, resolution.semester
+                        )
+                    )
+                except ValueError:
+                    pass
             return DateFreeRoomsResult(
-                resolution, "regular_timetable_not_applicable",
-                self._unavailable_reason(resolution), start, end, (),
-            )
-        overlapping_exceptions = tuple(
-            item
-            for item in resolution.exceptions
-            if item.start_minute < end and item.end_minute > start
-        )
-        if overlapping_exceptions:
-            populations = ", ".join(
-                sorted({item.affected_population for item in overlapping_exceptions})
-            )
-            return DateFreeRoomsResult(
-                resolution,
-                "calendar_exception_unapplied",
-                "A calendar no-class exception overlaps the request but cannot be safely "
-                f"matched to timetable rows ({populations}); room availability is unknown.",
-                start,
-                end,
-                (),
+                resolution, self._status_for_date_policy(date_policy), date_policy.reason,
+                start, end, (), uncertain,
             )
         try:
-            rooms = self.queries.find_free_rooms(
-                resolution.academic_year, resolution.semester, resolution.day_of_week,
-                start, duration_minutes, teaching_week=resolution.teaching_week,
+            rooms = self.queries.physical_rooms(resolution.academic_year, resolution.semester)
+            unparsed = self.queries.rooms_with_unparsed_meetings(
+                resolution.academic_year, resolution.semester,
+                teaching_week=resolution.teaching_week,
             )
         except ValueError as error:
             return DateFreeRoomsResult(
-                resolution, "normalized_timetable_unavailable", str(error), start, end, (),
+                resolution, AvailabilityStatus.NORMALIZED_TIMETABLE_UNAVAILABLE,
+                str(error), start, end, (), (),
             )
-        return DateFreeRoomsResult(resolution, "ok", "", start, end, tuple(rooms))
+        free: list[FreeRoom] = []
+        uncertain_rooms: list[UncertainRoom] = []
+        for room in rooms:
+            if room in unparsed:
+                if include_uncertain:
+                    uncertain_rooms.append(UncertainRoom(
+                        room, ("unparsed_timetable_meeting",),
+                        ("The room has a meeting with an unparsed day or time.",),
+                    ))
+                continue
+            availability = self._evaluate_room(room, resolution, start, end)
+            if availability.status == AvailabilityStatus.FREE:
+                free.append(FreeRoom(room, start, end, availability.free_until))
+            elif availability.status == AvailabilityStatus.UNCERTAIN and include_uncertain:
+                uncertain_rooms.append(UncertainRoom(
+                    room, availability.uncertainty_reason_codes,
+                    availability.uncertainty_reasons,
+                ))
+        return DateFreeRoomsResult(
+            resolution, "ok", "", start, end, tuple(free), tuple(uncertain_rooms)
+        )
 
     def get_room_availability_for_datetime(
         self, room: str, value: datetime | str, duration_minutes: int
     ) -> RoomAvailabilityResult:
-        free_result = self.find_free_rooms_for_datetime(value, duration_minutes)
+        _, resolution, start, end = self._request_context(value, duration_minutes)
         normalized = normalize_venue(room).normalized
-        if free_result.status != "ok":
+        date_policy = self.policy.evaluate_date(resolution)
+        if date_policy.authority != TimetableAuthority.AUTHORITATIVE:
             return RoomAvailabilityResult(
-                free_result.calendar, free_result.status, free_result.reason, normalized,
-                free_result.requested_start, free_result.requested_end, None, None,
+                resolution, self._status_for_date_policy(date_policy), date_policy.reason,
+                normalized, start, end, None, None,
+                uncertainty_reason_codes=(date_policy.reason_code,),
+                uncertainty_reasons=(date_policy.reason,),
             )
-        if not self.queries.physical_room_exists(
-            normalized, free_result.calendar.academic_year, free_result.calendar.semester
-        ):
+        try:
+            exists = self.queries.physical_room_exists(
+                normalized, resolution.academic_year, resolution.semester
+            )
+        except ValueError as error:
             return RoomAvailabilityResult(
-                free_result.calendar, "unknown_room",
-                "The normalized timetable does not contain this physical room.", normalized,
-                free_result.requested_start, free_result.requested_end, None, None,
+                resolution, AvailabilityStatus.NORMALIZED_TIMETABLE_UNAVAILABLE,
+                str(error), normalized, start, end, None, None,
             )
-        match = next(
-            (item for item in free_result.rooms if normalize_venue(item.room).normalized == normalized),
-            None,
+        if not exists:
+            return RoomAvailabilityResult(
+                resolution, AvailabilityStatus.UNKNOWN_ROOM,
+                "The normalized timetable does not contain this physical room.",
+                normalized, start, end, None, None,
+            )
+        unparsed = self.queries.rooms_with_unparsed_meetings(
+            resolution.academic_year, resolution.semester,
+            teaching_week=resolution.teaching_week,
         )
+        if normalized in unparsed:
+            reason = "The room has a meeting with an unparsed day or time."
+            return RoomAvailabilityResult(
+                resolution, AvailabilityStatus.UNCERTAIN, reason,
+                normalized, start, end, None, None,
+                uncertainty_reason_codes=("unparsed_timetable_meeting",),
+                uncertainty_reasons=(reason,),
+            )
+        return self._evaluate_room(normalized, resolution, start, end)
+
+    def _evaluate_room(
+        self, room: str, resolution: DateResolution, start: int, end: int
+    ) -> RoomAvailabilityResult:
+        meetings = self.queries.get_room_schedule(
+            room, resolution.academic_year, resolution.semester,
+            resolution.day_of_week, teaching_week=resolution.teaching_week,
+        )
+        evaluated = tuple(
+            EvaluatedMeeting(meeting, self.policy.evaluate_meeting(
+                resolution, meeting.start_minute, meeting.end_minute
+            ))
+            for meeting in meetings
+        )
+        occupied: list[OccupiedInterval] = []
+        uncertainties: list[EvaluatedMeeting] = []
+        future_boundaries: list[int] = []
+        for item in evaluated:
+            result = item.applicability
+            if result.status == ApplicabilityStatus.UNCERTAIN:
+                confirmed_overlap = tuple(
+                    interval for interval in result.confirmed_intervals
+                    if overlaps(*interval, start, end)
+                )
+                if confirmed_overlap:
+                    occupied.extend(
+                        OccupiedInterval(a, b, (item.meeting.meeting_id,))
+                        for a, b in confirmed_overlap
+                    )
+                    continue
+                if any(overlaps(*interval, start, end) for interval in result.uncertain_intervals):
+                    uncertainties.append(item)
+                future_boundaries.extend(
+                    interval[0] for interval in result.confirmed_intervals + result.uncertain_intervals
+                    if interval[0] >= end
+                )
+                continue
+            if result.status != ApplicabilityStatus.APPLICABLE:
+                continue
+            assert result.effective_start is not None and result.effective_end is not None
+            if overlaps(result.effective_start, result.effective_end, start, end):
+                occupied.append(OccupiedInterval(
+                    result.effective_start, result.effective_end, (item.meeting.meeting_id,)
+                ))
+            elif result.effective_start >= end:
+                future_boundaries.append(result.effective_start)
+        if occupied:
+            return RoomAvailabilityResult(
+                resolution, AvailabilityStatus.OCCUPIED,
+                "At least one applicable timetable meeting overlaps the request.",
+                room, start, end, False, None, tuple(occupied),
+                evaluated_meetings=evaluated,
+            )
+        if uncertainties:
+            codes = tuple(dict.fromkeys(item.applicability.reason_code for item in uncertainties))
+            reasons = tuple(dict.fromkeys(item.applicability.reason for item in uncertainties))
+            return RoomAvailabilityResult(
+                resolution, AvailabilityStatus.UNCERTAIN,
+                "Meeting applicability is uncertain; the room is not classified as free.",
+                room, start, end, None, None,
+                uncertainty_reason_codes=codes, uncertainty_reasons=reasons,
+                evaluated_meetings=evaluated,
+            )
         return RoomAvailabilityResult(
-            free_result.calendar, "ok", "", normalized, free_result.requested_start,
-            free_result.requested_end, match is not None,
-            match.free_until if match else None,
+            resolution, AvailabilityStatus.FREE,
+            "No applicable or uncertain timetable meeting overlaps the request.",
+            room, start, end, True,
+            min(future_boundaries) if future_boundaries else None,
+            evaluated_meetings=evaluated,
         )
+
+    def _request_context(
+        self, value: datetime | str, duration_minutes: int
+    ) -> tuple[datetime, DateResolution, int, int]:
+        instant = datetime.fromisoformat(value) if isinstance(value, str) else value
+        start = instant.hour * 60 + instant.minute
+        end = start + duration_minutes
+        if duration_minutes <= 0 or end > 24 * 60:
+            raise ValueError("requested interval must be positive and remain within one day")
+        return instant, self.resolver.resolve(instant.date()), start, end
