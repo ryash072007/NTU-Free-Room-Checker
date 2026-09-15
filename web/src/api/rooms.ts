@@ -24,7 +24,7 @@ export function findFreeRooms(
     date: query.date,
     time: query.time,
     duration: query.duration,
-    limit: query.limit ?? 100,
+    limit: query.limit ?? 1000,
     include_uncertain: query.includeUncertain ?? true,
   }, signal);
 }

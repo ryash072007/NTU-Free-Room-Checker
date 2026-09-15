@@ -39,7 +39,7 @@ def free_rooms(
     date_value: Annotated[date, Query(alias="date")],
     time: Annotated[str, Query(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")],
     duration: Annotated[int, Query(gt=0, le=1440)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 20,
     include_uncertain: bool = False,
 ) -> FreeRoomsResponse:
     minute = parse_api_clock(time)
