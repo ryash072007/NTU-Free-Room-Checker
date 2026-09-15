@@ -64,3 +64,24 @@ def test_unknown_room_is_not_reported_as_occupied_or_free(tmp_path: Path) -> Non
         )
     assert result.status == "unknown_room"
     assert result.is_free is None
+
+
+def test_students_union_window_blocks_confident_availability(tmp_path: Path) -> None:
+    with CalendarTimetableService(date_query_db(tmp_path)) as service:
+        result = service.find_free_rooms_for_datetime("2026-09-04T11:00", 60)
+    assert result.status == "calendar_exception_unapplied"
+    assert result.rooms == ()
+    assert "undergraduate_programmes" in result.reason
+
+
+def test_students_union_exception_does_not_block_outside_window(tmp_path: Path) -> None:
+    with CalendarTimetableService(date_query_db(tmp_path)) as service:
+        result = service.find_free_rooms_for_datetime("2026-09-04T15:00", 60)
+    assert result.status == "ok"
+
+
+def test_schedule_surfaces_students_union_exception(tmp_path: Path) -> None:
+    with CalendarTimetableService(date_query_db(tmp_path)) as service:
+        result = service.get_room_schedule_for_date("TR+15", "2026-09-04")
+    assert result.status == "ok_with_calendar_exception"
+    assert result.calendar.exceptions[0].affected_population == "undergraduate_programmes"
