@@ -191,6 +191,16 @@ def test_free_rooms_limit_and_default_omits_uncertain(client: TestClient) -> Non
     assert payload["uncertain_rooms"] == []
 
 
+def test_free_rooms_supports_campus_wide_result_limit(client: TestClient) -> None:
+    response = client.get("/api/v1/rooms/free", params={
+        "date": "2026-09-15", "time": "14:30", "duration": 1,
+        "include_uncertain": True, "limit": 1000,
+    })
+    assert response.status_code == 200
+    rooms = response.json()["rooms"]
+    assert any(item["room"] == "NIE-LHN-B1-01" for item in rooms)
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -198,7 +208,7 @@ def test_free_rooms_limit_and_default_omits_uncertain(client: TestClient) -> Non
         "/api/v1/rooms/free?date=2026-09-15&time=1430&duration=60",
         "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=0",
         "/api/v1/rooms/free?date=2026-09-15&time=23:30&duration=60",
-        "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=60&limit=101",
+        "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=60&limit=1001",
     ],
 )
 def test_invalid_inputs_use_structured_422(path: str, client: TestClient) -> None:
