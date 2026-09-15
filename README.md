@@ -185,3 +185,26 @@ npm run dev
 
 See [web-frontend.md](docs/web-frontend.md) for architecture, configuration, testing, and production build instructions.
 
+## Production Deployment
+
+The application packages as a unified, single-service web application where FastAPI directly serves the built React SPA:
+
+```powershell
+# Build frontend
+cd web && npm ci && npm run build && cd ..
+
+# Serve production application
+$env:NTU_ROOM_CHECKER_DB = "data/ntu_schedule.db"
+python -m ntu_room_checker serve --host 127.0.0.1 --port 8000
+```
+
+A multi-stage `Dockerfile` is provided for containerized deployment:
+
+```powershell
+docker build -t ntu-free-room-checker .
+docker run --rm -p 8000:8000 -e NTU_ROOM_CHECKER_DB=/data/ntu_schedule.db -v "${PWD}\data:/data:ro" ntu-free-room-checker
+```
+
+See [deployment.md](docs/deployment.md) for complete architecture, caching behavior, volume mounting, and environment configuration.
+
+
