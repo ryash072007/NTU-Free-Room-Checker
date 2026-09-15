@@ -1,17 +1,20 @@
 """Command-line entry point."""
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
 from ntu_room_checker.scraper.browser import browser_page
+from ntu_room_checker.normalization.profiling import profile_database, top_values
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ntu-room-checker")
-    scrape = parser.add_subparsers(dest="command", required=True).add_parser(
+    commands = parser.add_subparsers(dest="command", required=True)
+    scrape = commands.add_parser(
         "scrape", help="Scrape NTU public class schedules"
     )
     scrape.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
@@ -31,6 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
     scrape.add_argument(
         "--list-programmes", action="store_true", help="Discover options and exit"
     )
+    profile = commands.add_parser("profile", help="Profile immutable raw schedule data")
+    profile.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    profile.add_argument("--top", type=_positive_int, default=20)
     return parser
 
 
@@ -51,6 +57,14 @@ def _nonnegative_float(value: str) -> float:
 def main() -> None:
     args = build_parser().parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.command == "profile":
+        payload = profile_database(args.db).to_dict()
+        payload["top_venues"] = top_values(args.db, "venue", args.top)
+        payload["top_remarks"] = top_values(args.db, "remark", args.top)
+        payload["day_values"] = top_values(args.db, "day", 20)
+        payload["time_values"] = top_values(args.db, "time", args.top)
+        print(json.dumps(payload, indent=2))
+        return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:
             landing = ScheduleLandingPage(page, args.timeout)
