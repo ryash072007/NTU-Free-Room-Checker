@@ -106,8 +106,8 @@ Sunday cases shown; it does not generalize beyond the PDF.
 
 The rule that classes end at 14:30 on the eves of New Year's Day, Chinese New
 Year, Hari Raya Puasa, and Deepavali is stored as a structured
-`EarlyDismissalPolicy`. It is metadata only: meetings are not silently shortened
-without reliable row-level override semantics.
+`EarlyDismissalPolicy` and as four explicitly dated calendar exceptions. The
+policy layer preserves scheduled times while deriving effective intervals.
 
 ## Students' Union Day exception
 
@@ -121,10 +121,9 @@ The University Key Events table is encoded as a structured exception:
 | Description | No classes for UG programmes from 1030 to 1430 hours. |
 
 The normalized timetable cannot reliably distinguish UG from PG applicability.
-Room schedules retain their rows and return `ok_with_calendar_exception`.
-Free-room and direct availability queries overlapping this window return
-`calendar_exception_unapplied` and no rooms, rather than guessing which meetings
-are cancelled.
+The policy marks only the affected portions of overlapping meetings uncertain.
+Those rooms are excluded from confident free-room results; rooms without a
+potentially affected meeting are not made uncertain globally.
 
 ## Resolution and conservative behavior
 
@@ -136,7 +135,7 @@ Date-aware queries refuse to claim availability with these statuses:
 
 - `regular_timetable_not_applicable`: orientation, recess,
   revision/examination, Sunday/gap, or outside-term date;
-- `calendar_exception_unapplied`: an overlapping scoped no-class exception;
+- `uncertain`: an overlapping meeting has unresolved exception applicability;
 - `normalized_timetable_unavailable`: that semester is not normalized;
 - `unknown_room`: the room is absent from normalized physical rooms.
 
@@ -144,6 +143,9 @@ The calendar governs regular teaching only. It does not prove rooms are unused
 during holidays, recess, examinations, orientation, weekends, or exceptional
 events. Exam allocations, ad-hoc bookings, replacement lessons, and events are
 outside the current timetable dataset.
+
+The downstream confidence states and effective-interval rules are documented in
+[`calendar-exception-policy.md`](calendar-exception-policy.md).
 
 All dates are subject to change at the discretion of the University, as stated
 in the PDF. A newly published calendar requires an explicit configuration update

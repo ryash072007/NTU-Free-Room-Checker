@@ -135,6 +135,8 @@ AY2026-27 calendar-date resolution is available for regular timetable queries.
 The configuration, full week mapping, public holidays, Special Term mapping, and
 non-teaching-period safety behavior are documented in
 [academic-calendar.md](docs/academic-calendar.md).
+Exception effects, confidence states, and conservative free-room semantics are
+documented in [calendar-exception-policy.md](docs/calendar-exception-policy.md).
 
 ```powershell
 python -m ntu_room_checker calendar-date 2026-09-15
