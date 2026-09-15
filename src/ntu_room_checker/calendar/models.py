@@ -14,6 +14,18 @@ class PeriodType(StrEnum):
     OUTSIDE_TERM = "outside_term"
 
 
+class ExceptionEffect(StrEnum):
+    NO_CLASSES = "no_classes"
+    CLASSES_END_AT = "classes_end_at"
+    TIMETABLE_NOT_AUTHORITATIVE = "timetable_not_authoritative"
+    INFORMATIONAL = "informational"
+
+
+class PopulationScope(StrEnum):
+    ALL = "all"
+    UNDERGRADUATE = "undergraduate_programmes"
+
+
 @dataclass(frozen=True, slots=True)
 class CalendarPeriod:
     start: date
@@ -44,16 +56,27 @@ class PublicHoliday:
 
 @dataclass(frozen=True, slots=True)
 class CalendarException:
+    exception_id: str
     date: date
-    start_minute: int
-    end_minute: int
-    affected_population: str
+    effect: ExceptionEffect
+    affected_population: PopulationScope
     description: str
+    start_minute: int | None = None
+    end_minute: int | None = None
+    cutoff_minute: int | None = None
     source_note: str = ""
 
     def __post_init__(self) -> None:
-        if not 0 <= self.start_minute < self.end_minute <= 24 * 60:
-            raise ValueError("calendar exception must be a valid within-day interval")
+        if (self.start_minute is None) != (self.end_minute is None):
+            raise ValueError("calendar exception interval requires both start and end")
+        if self.start_minute is not None and not (
+            0 <= self.start_minute < self.end_minute <= 24 * 60  # type: ignore[operator]
+        ):
+            raise ValueError("calendar exception must have a valid within-day interval")
+        if self.effect == ExceptionEffect.CLASSES_END_AT and self.cutoff_minute is None:
+            raise ValueError("classes_end_at requires a cutoff")
+        if self.cutoff_minute is not None and not 0 <= self.cutoff_minute <= 24 * 60:
+            raise ValueError("calendar exception cutoff must be within the day")
 
 
 @dataclass(frozen=True, slots=True)

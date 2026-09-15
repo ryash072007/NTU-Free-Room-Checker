@@ -7,7 +7,9 @@ from ntu_room_checker.calendar.models import (
     CalendarException,
     CalendarPeriod,
     EarlyDismissalPolicy,
+    ExceptionEffect,
     PeriodType,
+    PopulationScope,
     PublicHoliday,
 )
 
@@ -103,12 +105,50 @@ HOLIDAYS = (
 
 EXCEPTIONS = (
     CalendarException(
+        exception_id="students_union_day_2026",
         date=date(2026, 9, 4),
+        effect=ExceptionEffect.NO_CLASSES,
+        affected_population=PopulationScope.UNDERGRADUATE,
+        description="Students' Union Day: No classes for UG programmes from 1030 to 1430 hours.",
         start_minute=10 * 60 + 30,
         end_minute=14 * 60 + 30,
-        affected_population="undergraduate_programmes",
-        description="Students' Union Day: No classes for UG programmes from 1030 to 1430 hours.",
         source_note="University Key Events table in the official AY2026-27 PDF.",
+    ),
+    CalendarException(
+        exception_id="deepavali_eve_2026",
+        date=date(2026, 11, 7),
+        effect=ExceptionEffect.CLASSES_END_AT,
+        affected_population=PopulationScope.ALL,
+        cutoff_minute=14 * 60 + 30,
+        description="Classes end at 1430 hours on the eve of Deepavali.",
+        source_note="Caret footnote in the official AY2026-27 PDF.",
+    ),
+    CalendarException(
+        exception_id="new_year_eve_2026",
+        date=date(2026, 12, 31),
+        effect=ExceptionEffect.CLASSES_END_AT,
+        affected_population=PopulationScope.ALL,
+        cutoff_minute=14 * 60 + 30,
+        description="Classes end at 1430 hours on the eve of New Year's Day.",
+        source_note="Caret footnote in the official AY2026-27 PDF.",
+    ),
+    CalendarException(
+        exception_id="chinese_new_year_eve_2027",
+        date=date(2027, 2, 5),
+        effect=ExceptionEffect.CLASSES_END_AT,
+        affected_population=PopulationScope.ALL,
+        cutoff_minute=14 * 60 + 30,
+        description="Classes end at 1430 hours on the eve of Chinese New Year.",
+        source_note="Caret footnote in the official AY2026-27 PDF.",
+    ),
+    CalendarException(
+        exception_id="hari_raya_puasa_eve_2027",
+        date=date(2027, 3, 9),
+        effect=ExceptionEffect.CLASSES_END_AT,
+        affected_population=PopulationScope.ALL,
+        cutoff_minute=14 * 60 + 30,
+        description="Classes end at 1430 hours on the eve of Hari Raya Puasa.",
+        source_note="Caret footnote in the official AY2026-27 PDF.",
     ),
 )
 
