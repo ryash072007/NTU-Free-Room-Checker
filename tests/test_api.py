@@ -218,3 +218,30 @@ def test_openapi_documents_versioned_routes_and_nullable_is_free(client: TestCli
 def test_singapore_now_is_timezone_aware() -> None:
     current = singapore_now()
     assert current.utcoffset() == timedelta(hours=8)
+
+
+def test_settings_read_database_and_cors_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NTU_ROOM_CHECKER_DB", "custom/schedule.db")
+    monkeypatch.setenv(
+        "NTU_ROOM_CHECKER_CORS_ORIGINS",
+        "http://localhost:3000, http://localhost:5173",
+    )
+    settings = ApiSettings.from_environment()
+    assert settings.database_path == Path("custom/schedule.db")
+    assert settings.cors_origins == (
+        "http://localhost:3000", "http://localhost:5173"
+    )
+
+
+def test_cors_is_allowlisted_without_credentials(client: TestClient) -> None:
+    response = client.options("/api/v1/health", headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "GET",
+    })
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_application_endpoints_are_not_exposed_unversioned(client: TestClient) -> None:
+    assert client.get("/health").status_code == 404
