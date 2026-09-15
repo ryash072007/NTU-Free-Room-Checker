@@ -26,6 +26,8 @@ For Learning Hub South, the official facilities list gives `LHS-*` physical addr
 
 ## Profile of the AY2026–27 Semester 1 database
 
-The normalized database contains 532 physical-room identifiers. Major families include 43 `LHN-` rooms, 36 `LHS-` rooms, 57 plain `TR+` rooms, 30 plain `LT` rooms, 49 `NIE*` rooms, 38 `ART-*` rooms, 30 `S4-*` rooms, and 10 `S3-*` rooms. It also contains school-specific families such as `SPMS-*`, `SBS-*`, `SCI-*`, and many isolated lab/studio names.
+The normalized database contains 532 physical-room identifiers. Major families include 43 `LHN-` rooms, 37 `LHS-` rooms (including `LHS-LT`), 57 plain `TR+` rooms, 30 plain `LT` rooms, 49 `NIE*` rooms, 38 `ART-*` rooms, 30 `S4-*` rooms, and 10 `S3-*` rooms. It also contains school-specific families such as `SPMS-*`, `SBS-*`, `SCI-*`, and many isolated lab/studio names.
+
+With the conservative rules above, the real database currently assigns 43 rooms to The Arc, 52 to North Spine, 37 to The Hive, and 53 to South Spine. The remainder stay unmapped.
 
 Ambiguous or deliberately unmapped families include school/building codes (`ART-*`, `ABS-*`, `S3-*`, `S4-*`, `NIE*`, `SPMS-*`, `SBS-*`), generic labs/studios, and malformed source values beginning `//`. A future mapping should add these only with comparable evidence; proximity must not be inferred from a shared substring.
