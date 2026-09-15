@@ -35,7 +35,7 @@ though they happen not to change this snapshot's count.
 The resulting pipeline is:
 
 ```text
-514,394 raw rows -> 7,013 canonical classes -> 8,952 meetings -> 536 physical rooms
+514,394 raw rows -> 7,013 canonical classes -> 8,952 meetings -> 532 physical rooms
 ```
 
 This is a 98.260% reduction in meeting rows caused by eliminating repeated
@@ -62,11 +62,12 @@ ordered minute offsets. Of the canonical meetings, 8,949 times and 8,949 weekday
 parse; three retain missing day and time values. The observed weekday values are
 MON through SAT plus blank.
 
-Venue classification at meeting level is 8,849 physical, 75 online, 9 blank/none,
-6 unknown (`TBA`/`TBC`), and 13 other. The latter are `OVERSEAS` plus observed date
-expressions such as `3 AUG` and `4&11 AUG` misplaced in the venue column. Balanced quote wrappers found
+Venue classification at meeting level is 8,840 physical, 75 online, 9 blank/none,
+7 unknown (`TBA`, `TBC`, and `ADM VENUE`), and 21 other. The latter include
+`OVERSEAS`, `RECORDED`, `RECORDING`, `SITE VISIT`, and observed date expressions
+such as `3 AUG` and `4&11 AUG` misplaced in the venue column. Balanced quote wrappers found
 on 16 raw venue rows are removed only from the normalized alias; `venue_raw`
-retains them. No other punctuation aliases are inferred. This produces 536 unique
+retains them. No other punctuation aliases are inferred. This produces 532 unique
 physical rooms.
 
 The remark profile consists of 135 distinct `Teaching Wk...` expressions, one

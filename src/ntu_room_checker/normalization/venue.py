@@ -4,9 +4,9 @@ import re
 
 from ntu_room_checker.normalization.models import VenueResult
 
-UNKNOWN_VALUES = {"TBA", "TBC", "NIL", "N/A", "NA"}
+UNKNOWN_VALUES = {"TBA", "TBC", "NIL", "N/A", "NA", "ADM VENUE"}
 ONLINE_VALUES = {"ONLINE"}
-OTHER_VALUES = {"OVERSEAS"}
+OTHER_VALUES = {"OVERSEAS", "RECORDED", "RECORDING", "SITE VISIT"}
 DATE_EXPRESSION = re.compile(
     r"\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b"
 )
