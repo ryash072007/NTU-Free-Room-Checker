@@ -40,6 +40,22 @@ function RoomRow({ room }: { room: LocationRoomItem }) {
   </Link></li>;
 }
 
+function bestAvailability(left: LocationRoomItem, right: LocationRoomItem) {
+  const rank = (room: LocationRoomItem) => room.status === "free" ? 0 : room.status === "occupied" ? 1 : 2;
+  const rankDifference = rank(left) - rank(right);
+  if (rankDifference) return rankDifference;
+  if (left.status === "free" && right.status === "free") {
+    const leftDuration = left.free_duration_minutes ?? Number.POSITIVE_INFINITY;
+    const rightDuration = right.free_duration_minutes ?? Number.POSITIVE_INFINITY;
+    if (leftDuration !== rightDuration) return rightDuration - leftDuration;
+  }
+  if (left.status === "occupied" && right.status === "occupied") {
+    const availability = (left.available_from ?? "99:99").localeCompare(right.available_from ?? "99:99");
+    if (availability) return availability;
+  }
+  return left.room.localeCompare(right.room);
+}
+
 export function LocationsPage() {
   const initial = useRef(singaporeDateTime()).current;
   const [locations, setLocations] = useState<LocationItem[]>([]);
@@ -90,7 +106,7 @@ export function LocationsPage() {
     if (locationId !== ANYWHERE_ID && duration > 0) {
       values = values.filter((room) => room.status !== "free" || room.free_duration_minutes === null || room.free_duration_minutes >= duration);
     }
-    return sort === "name" ? [...values].sort((a, b) => a.room.localeCompare(b.room)) : values;
+    return [...values].sort(sort === "name" ? (a, b) => a.room.localeCompare(b.room) : bestAvailability);
   }, [result, filter, sort, locationId, duration]);
   const groups = [["free", "Free"], ["occupied", "In use"], ["uncertain", "Uncertain"]] as const;
   const useNow = () => { const current = roundedSingaporeDateTime(); setDate(current.date); setTime(current.time); };

@@ -34,8 +34,8 @@ describe("Browse Rooms", () => {
     mockedLocationRooms.mockResolvedValue(namedResponse);
     mockedFreeRooms.mockResolvedValue(freeRooms({
       rooms: [
-        { room: "UNMAPPED-LAB", free_until: null, free_duration_minutes: null },
         { room: "LHN-TR+17", free_until: "17:50", free_duration_minutes: 125 },
+        { room: "UNMAPPED-LAB", free_until: null, free_duration_minutes: null },
       ],
       uncertain_rooms: [{ room: "TR+17", reason_codes: ["unparsed_timetable_meeting"], reasons: ["Cannot confirm this room."] }],
     }));
@@ -50,6 +50,8 @@ describe("Browse Rooms", () => {
       date: "2026-09-15", time: "15:43", duration: 1, limit: 1000,
     }), expect.any(AbortSignal));
     expect(screen.getByRole("heading", { name: /Uncertain/ })).toBeInTheDocument();
+    const roomLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/rooms/"));
+    expect(roomLinks[0]).toHaveTextContent("UNMAPPED-LAB");
   });
 
   it("selects a named location and renders all three status groups", async () => {
