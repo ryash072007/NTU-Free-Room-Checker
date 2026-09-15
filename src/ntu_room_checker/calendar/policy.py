@@ -35,6 +35,8 @@ class MeetingApplicabilityResult:
     effective_start: int | None
     effective_end: int | None
     applied_exceptions: tuple[CalendarException, ...] = ()
+    confirmed_intervals: tuple[tuple[int, int], ...] = ()
+    uncertain_intervals: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +97,8 @@ class CalendarPolicyEngine:
                 end_minute,
                 start_minute,
                 end_minute,
+                confirmed_intervals=(),
+                uncertain_intervals=((start_minute, end_minute),),
             )
 
         effective_end = end_minute
@@ -113,7 +117,7 @@ class CalendarPolicyEngine:
                         ApplicabilityStatus.NOT_APPLICABLE,
                         "after_official_class_end",
                         f"The meeting starts at or after the official {cutoff // 60:02d}:{cutoff % 60:02d} class-ending cutoff.",
-                        start_minute, end_minute, None, None, tuple(applied),
+                        start_minute, end_minute, None, None, tuple(applied), (), (),
                     )
                 effective_end = min(effective_end, cutoff)
                 continue
@@ -140,6 +144,7 @@ class CalendarPolicyEngine:
         return MeetingApplicabilityResult(
             ApplicabilityStatus.APPLICABLE, reason_code, reason,
             start_minute, end_minute, start_minute, effective_end, tuple(applied),
+            ((start_minute, effective_end),), (),
         )
 
     @staticmethod
@@ -152,9 +157,19 @@ class CalendarPolicyEngine:
     def _uncertain(
         exception: CalendarException, start: int, end: int, reason_code: str
     ) -> MeetingApplicabilityResult:
+        exception_start = exception.start_minute if exception.start_minute is not None else 0
+        exception_end = exception.end_minute if exception.end_minute is not None else 24 * 60
+        uncertain_start = max(start, exception_start)
+        uncertain_end = min(end, exception_end)
+        confirmed = tuple(
+            interval
+            for interval in ((start, uncertain_start), (uncertain_end, end))
+            if interval[0] < interval[1]
+        )
         return MeetingApplicabilityResult(
             ApplicabilityStatus.UNCERTAIN,
             reason_code,
             f"{exception.description} Timetable population/applicability cannot be resolved safely.",
-            start, end, start, end, (exception,),
+            start, end, start, end, (exception,), confirmed,
+            ((uncertain_start, uncertain_end),),
         )

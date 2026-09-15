@@ -89,7 +89,7 @@ class CalendarTimetableService:
     def get_room_schedule_for_date(self, room: str, value: date | str) -> DateScheduleResult:
         resolution = self.resolver.resolve(value)
         date_policy = self.policy.evaluate_date(resolution)
-        if date_policy.authority != TimetableAuthority.AUTHORITATIVE:
+        if not resolution.regular_timetable_applicable:
             return DateScheduleResult(
                 resolution, self._status_for_date_policy(date_policy), date_policy.reason, (), ()
             )
