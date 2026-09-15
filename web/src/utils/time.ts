@@ -3,6 +3,8 @@ export interface LocalDateTime {
   time: string;
 }
 
+export const ROOM_TRANSITION_MINUTES = 10;
+
 const SINGAPORE_ZONE = "Asia/Singapore";
 
 export function singaporeDateTime(now = new Date()): LocalDateTime {

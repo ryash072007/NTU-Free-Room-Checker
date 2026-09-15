@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, roundedSingaporeDateTime, shiftIsoDate, singaporeDateTime } from "./time";
+import {
+  ROOM_TRANSITION_MINUTES,
+  formatDuration,
+  roundedSingaporeDateTime,
+  shiftIsoDate,
+  singaporeDateTime,
+} from "./time";
 
 describe("Singapore time utilities", () => {
   it("uses Asia/Singapore instead of the browser timezone", () => {
@@ -15,6 +21,7 @@ describe("Singapore time utilities", () => {
   });
 
   it("formats durations and shifts dates across month boundaries", () => {
+    expect(ROOM_TRANSITION_MINUTES).toBe(10);
     expect(formatDuration(150)).toBe("2h 30m");
     expect(shiftIsoDate("2026-09-30", 1)).toBe("2026-10-01");
   });

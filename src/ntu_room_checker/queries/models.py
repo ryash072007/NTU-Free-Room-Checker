@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from ntu_room_checker.calendar.policy import MeetingApplicabilityResult
 
+ROOM_TRANSITION_MINUTES: int = 10
+
 
 @dataclass(frozen=True, slots=True)
 class RoomMeeting:

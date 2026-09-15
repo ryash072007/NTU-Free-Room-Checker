@@ -84,13 +84,16 @@ def schedule_response(room: str, result: DateScheduleResult) -> RoomScheduleResp
 
 
 def availability_response(result: RoomAvailabilityResult) -> RoomAvailabilityResponse:
-    uncertain_intervals = [
-        interval
-        for item in result.evaluated_meetings
-        if item.applicability.status == ApplicabilityStatus.UNCERTAIN
-        for interval in item.applicability.uncertain_intervals
-        if overlaps(*interval, result.requested_start, result.requested_end)
-    ]
+    if result.uncertain_intervals:
+        uncertain_intervals = list(result.uncertain_intervals)
+    else:
+        uncertain_intervals = [
+            interval
+            for item in result.evaluated_meetings
+            if item.applicability.status == ApplicabilityStatus.UNCERTAIN
+            for interval in item.applicability.uncertain_intervals
+            if overlaps(*interval, result.requested_start, result.requested_end)
+        ]
     return RoomAvailabilityResponse(
         room=result.room,
         date=result.calendar.date,

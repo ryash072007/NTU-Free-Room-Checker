@@ -104,6 +104,7 @@ The client never equates *"no regular class scheduled"* with *"the physical room
 - **NON-APPLICABLE PERIODS (e.g. Recess Week)**: Displays informative notices explaining why the regular timetable cannot establish physical availability; no free gaps are invented.
 - **NON-AUTHORITATIVE PERIODS (e.g. Revision & Exam Weeks)**: Timetable entries are suppressed or marked non-authoritative; the user is advised that rooms may be reserved for exams or study.
 - **CALENDAR EXCEPTIONS (e.g. Students' Union Day, Eve Dismissals)**: Explains adjusted ending times or uncertain intervals resulting from population scope ambiguity.
+- **ROOM TRANSITIONS (`ROOM_TRANSITION_MINUTES = 10`)**: Gaps of 10 minutes or less between consecutive classes are treated as student changeover intervals and never rendered as "Free" rows; genuine gaps (> 10 minutes) render as confirmed free gaps.
 
 ---
 

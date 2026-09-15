@@ -168,3 +168,102 @@ def test_unparsed_meeting_keeps_direct_room_availability_uncertain(tmp_path: Pat
         )
     assert result.status == "uncertain"
     assert result.uncertainty_reason_codes == ("unparsed_timetable_meeting",)
+
+
+def test_transition_buffer_availability_and_uncertainty_semantics(tmp_path: Path) -> None:
+    import pytest
+    path = tmp_path / "trans_cal.db"
+    term = AcademicTerm("2026;1", "Acad Yr 2026 Semester 1", "2026", "1")
+    entries = [
+        ScheduleEntry("AB1", "1", "3.0 AU", "", "1", "TUT", "G1", "TUE", "1000-1100", "TR+10", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB2", "2", "3.0 AU", "", "2", "TUT", "G2", "TUE", "1110-1200", "TR+10", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB3", "3", "3.0 AU", "", "3", "TUT", "G3", "TUE", "1210-1300", "TR+10", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB4", "4", "3.0 AU", "", "4", "TUT", "G4", "TUE", "1000-1100", "TR+20", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB5", "5", "3.0 AU", "", "5", "TUT", "G5", "TUE", "1115-1200", "TR+20", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB6", "6", "3.0 AU", "", "6", "TUT", "G6", "FRI", "0930-1030", "TR+30", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB7", "7", "3.0 AU", "", "7", "TUT", "G7", "FRI", "1040-1200", "TR+30", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB8", "8", "3.0 AU", "", "8", "TUT", "G8", "FRI", "1300-1430", "TR+40", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB9", "9", "3.0 AU", "", "9", "TUT", "G9", "FRI", "1440-1600", "TR+40", "Teaching Wk1-13", {}),
+    ]
+    with ScheduleStorage(path) as storage:
+        run_id = storage.start_run("https://example.test", term, resume=False)
+        storage.register_programmes(run_id, [ProgrammeOption("P1", "Programme")])
+        sel = storage.remaining_programmes(run_id)[0]
+        storage.save_entries(run_id, sel["id"], entries)
+        storage.finish_run(run_id)
+    normalize_database(path)
+
+    with CalendarTimetableService(path) as service:
+        # 6. free-room search during transition gap -> room excluded
+        free_rooms = service.find_free_rooms_for_datetime("2026-09-15T11:05", 5)
+        room_names = {r.room for r in free_rooms.rooms}
+        assert "TR+10" not in room_names
+        assert "TR+20" in room_names
+
+        # 7. room availability during transition gap -> occupied, reason room_transition_buffer
+        avail = service.get_room_availability_for_datetime("TR+10", "2026-09-15T11:05", 5)
+        assert avail.status == "occupied"
+        assert avail.is_free is False
+        assert avail.uncertainty_reason_codes == ("room_transition_buffer",)
+        assert "transition between consecutive classes" in avail.reason
+
+        # 8. free-until with chained classes -> stops at beginning of continuous occupied block
+        before = service.get_room_availability_for_datetime("TR+10", "2026-09-15T09:00", 30)
+        assert before.status == "free"
+        assert before.is_free is True
+        assert before.free_until == 600  # 10:00
+
+        # Also verify 15-minute gap allows free interval:
+        gap_avail = service.get_room_availability_for_datetime("TR+20", "2026-09-15T11:02", 5)
+        assert gap_avail.status == "free"
+        assert gap_avail.is_free is True
+        assert gap_avail.free_until == 675  # 11:15
+
+        # 9. uncertainty beside a <=10-minute transition:
+        # TR+30: confirmed ends 10:30. Uncertain meeting starts 10:40.
+        # Query at 10:35 (5 min) is in the 10:30-10:40 transition gap adjacent to uncertain meeting:
+        trans_u1 = service.get_room_availability_for_datetime("TR+30", "2026-09-04T10:35", 5)
+        assert trans_u1.status == "uncertain"
+        assert trans_u1.is_free is None
+
+        # TR+40: uncertain meeting ends 14:30. Confirmed meeting starts 14:40.
+        # Query at 14:35 (5 min) is in the 14:30-14:40 transition gap adjacent to uncertain meeting:
+        trans_u2 = service.get_room_availability_for_datetime("TR+40", "2026-09-04T14:35", 5)
+        assert trans_u2.status == "uncertain"
+        assert trans_u2.is_free is None
+
+
+def test_real_dataset_transition_and_gap_verification() -> None:
+    import pytest
+    db_path = Path("data/ntu_schedule.db")
+    if not db_path.is_file():
+        pytest.skip("Production database data/ntu_schedule.db not found")
+
+    with CalendarTimetableService(db_path) as service:
+        for check_time in ["12:25", "14:25", "16:25"]:
+            avail = service.get_room_availability_for_datetime(
+                "LHN-TR+15", f"2026-09-15T{check_time}", 5
+            )
+            assert avail.status == "occupied"
+            assert avail.is_free is False
+            assert avail.uncertainty_reason_codes == ("room_transition_buffer",)
+
+            free = service.find_free_rooms_for_datetime(f"2026-09-15T{check_time}", 5)
+            assert not any(r.room == "LHN-TR+15" for r in free.rooms)
+
+        morning = service.get_room_availability_for_datetime(
+            "LHN-TR+15", "2026-09-15T10:00", 15
+        )
+        assert morning.status == "free"
+        assert morning.is_free is True
+        assert morning.free_until == 630  # 10:30
+
+        cskl_avail = service.get_room_availability_for_datetime(
+            "CSKL10B", "2026-09-15T14:00", 15
+        )
+        assert cskl_avail.status == "free"
+        assert cskl_avail.is_free is True
+        assert cskl_avail.free_until == 870  # 14:30
+        cskl_free = service.find_free_rooms_for_datetime("2026-09-15T14:00", 15)
+        assert any(r.room == "CSKL10B" for r in cskl_free.rooms)
+

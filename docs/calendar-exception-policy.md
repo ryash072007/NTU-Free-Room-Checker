@@ -107,6 +107,15 @@ are never mixed into `rooms`. `free_until` uses policy-evaluated intervals. Both
 the next confirmed and next uncertain interval bound confident freedom. Unparsed
 day/time rows continue to disqualify a room conservatively.
 
+## Room transition changeovers
+
+Intervals of 10 minutes or less between room bookings/classes are treated as room transition time, not usable free-room availability:
+- Scheduled meeting times remain unchanged.
+- This affects availability and free-gap calculation only (classes separated by $\le 10$ minutes coalesce into continuous occupied blocks for availability).
+- Gaps $> 10$ minutes remain eligible as genuine free intervals.
+- Gaps adjacent to uncertain intervals remain conservative/uncertain rather than producing false free intervals.
+
+
 ## CLI
 
 ```powershell

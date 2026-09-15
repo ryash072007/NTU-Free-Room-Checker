@@ -48,6 +48,65 @@ describe("Room schedule page", () => {
     ]);
   });
 
+  it("does not render free gaps for 10-minute class transitions", () => {
+    const classA = {
+      ...meeting,
+      course_code: "SC2002",
+      scheduled_start: "08:30",
+      scheduled_end: "09:20",
+      effective_start: "08:30",
+      effective_end: "09:20",
+    };
+    const classB = {
+      ...meeting,
+      course_code: "SC2000",
+      scheduled_start: "09:30",
+      scheduled_end: "10:20",
+      effective_start: "09:30",
+      effective_end: "10:20",
+    };
+    const timeline = buildTimeline([classA, classB], true);
+    expect(timeline.map((item) => item.kind === "meeting" ? item.meeting.course_code : `${item.start}-${item.end}`)).toEqual([
+      "SC2002", "SC2000",
+    ]);
+  });
+
+  it("renders a genuine free gap when the interval exceeds 10 minutes", () => {
+    const classA = {
+      ...meeting,
+      course_code: "SC2002",
+      scheduled_start: "08:30",
+      scheduled_end: "09:20",
+      effective_start: "08:30",
+      effective_end: "09:20",
+    };
+    const classB = {
+      ...meeting,
+      course_code: "SC2000",
+      scheduled_start: "09:31",
+      scheduled_end: "10:20",
+      effective_start: "09:31",
+      effective_end: "10:20",
+    };
+    const timeline = buildTimeline([classA, classB], true);
+    expect(timeline.map((item) => item.kind === "meeting" ? item.meeting.course_code : `${item.start}-${item.end}`)).toEqual([
+      "SC2002", "09:20-09:31", "SC2000",
+    ]);
+  });
+
+  it("renders multiple chained classes with 10-minute changeovers and zero free gaps", () => {
+    const classes = [
+      { ...meeting, course_code: "ML0004_1", scheduled_start: "10:30", scheduled_end: "12:20", effective_start: "10:30", effective_end: "12:20" },
+      { ...meeting, course_code: "ML0004_2", scheduled_start: "12:30", scheduled_end: "14:20", effective_start: "12:30", effective_end: "14:20" },
+      { ...meeting, course_code: "ML0004_3", scheduled_start: "14:30", scheduled_end: "16:20", effective_start: "14:30", effective_end: "16:20" },
+      { ...meeting, course_code: "ML0004_4", scheduled_start: "16:30", scheduled_end: "18:20", effective_start: "16:30", effective_end: "18:20" },
+    ];
+    const timeline = buildTimeline(classes, true);
+    expect(timeline.map((item) => item.kind === "meeting" ? item.meeting.course_code : `${item.start}-${item.end}`)).toEqual([
+      "ML0004_1", "ML0004_2", "ML0004_3", "ML0004_4",
+    ]);
+  });
+
   it("explains an exception-adjusted effective interval", async () => {
     mockedSchedule.mockResolvedValue(schedule({
       status: "ok_with_adjustments",

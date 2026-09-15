@@ -101,3 +101,86 @@ def test_queries_cross_thread_and_read_only_support(tmp_path: Path) -> None:
 
     assert TimetableQueries.database_available(path) is True
 
+
+def test_interval_coalescing_rules() -> None:
+    from ntu_room_checker.queries.models import ROOM_TRANSITION_MINUTES, RoomMeeting
+    from ntu_room_checker.queries.service import coalesce_occupied_intervals
+
+    assert ROOM_TRANSITION_MINUTES == 10
+
+    def make_meeting(mid: int, start: int, end: int) -> RoomMeeting:
+        return RoomMeeting(
+            meeting_id=mid,
+            course_code="TEST",
+            course_title="Title",
+            index_number="12345",
+            class_type="LEC",
+            group_name="G1",
+            day_of_week=1,
+            start_minute=start,
+            end_minute=end,
+            venue="TR+15",
+            remark="",
+            teaching_weeks=(1, 2, 3),
+            week_parse_status="parsed",
+            source_count=1,
+        )
+
+    # 1. adjacent classes: 10:00–11:00, 11:00–12:00 -> continuous occupied [600, 720]
+    m1 = make_meeting(1, 600, 660)
+    m2 = make_meeting(2, 660, 720)
+    res = coalesce_occupied_intervals([m1, m2])
+    assert len(res) == 1
+    assert (res[0].start_minute, res[0].end_minute) == (600, 720)
+    assert res[0].meeting_ids == (1, 2)
+
+    # 2. 5-minute gap: 10:00–11:00, 11:05–12:00 -> continuous occupied [600, 720]
+    m2_5 = make_meeting(2, 665, 720)
+    res_5 = coalesce_occupied_intervals([m1, m2_5])
+    assert len(res_5) == 1
+    assert (res_5[0].start_minute, res_5[0].end_minute) == (600, 720)
+
+    # 3. exactly 10-minute gap: 10:00–11:00, 11:10–12:00 -> continuous occupied [600, 720]
+    m2_10 = make_meeting(2, 670, 720)
+    res_10 = coalesce_occupied_intervals([m1, m2_10])
+    assert len(res_10) == 1
+    assert (res_10[0].start_minute, res_10[0].end_minute) == (600, 720)
+
+    # 4. 11-minute gap: 10:00–11:00, 11:11–12:00 -> separate intervals
+    m2_11 = make_meeting(2, 671, 720)
+    res_11 = coalesce_occupied_intervals([m1, m2_11])
+    assert len(res_11) == 2
+    assert (res_11[0].start_minute, res_11[0].end_minute) == (600, 660)
+    assert (res_11[1].start_minute, res_11[1].end_minute) == (671, 720)
+
+    # 5. multiple chained 10-minute gaps: 10:00–11:00, 11:10–12:00, 12:10–13:00 -> continuous [600, 780]
+    m3 = make_meeting(3, 730, 780)
+    res_chain = coalesce_occupied_intervals([m1, m2_10, m3])
+    assert len(res_chain) == 1
+    assert (res_chain[0].start_minute, res_chain[0].end_minute) == (600, 780)
+    assert res_chain[0].meeting_ids == (1, 2, 3)
+
+
+def test_canonical_free_rooms_transition_exclusion(tmp_path: Path) -> None:
+    path = tmp_path / "trans.db"
+    term = AcademicTerm("2026;1", "Acad Yr 2026 Semester 1", "2026", "1")
+    e1 = entry("AB1", "1", "TR+10", "1000-1100")
+    e2 = entry("AB2", "2", "TR+10", "1110-1200")
+    e3 = entry("AB3", "3", "TR+20", "1000-1100")
+    e4 = entry("AB4", "4", "TR+20", "1115-1200")
+    with ScheduleStorage(path) as storage:
+        run_id = storage.start_run("https://example.test", term, resume=False)
+        storage.register_programmes(run_id, [ProgrammeOption("P1", "Programme")])
+        sel = storage.remaining_programmes(run_id)[0]
+        storage.save_entries(run_id, sel["id"], [e1, e2, e3, e4])
+        storage.finish_run(run_id)
+    normalize_database(path)
+
+    with TimetableQueries(path) as queries:
+        free = queries.find_free_rooms(2026, 1, "MON", "1105", 5, teaching_week=1)
+        by_room = {r.room: r for r in free}
+        assert "TR+10" not in by_room
+        assert "TR+20" in by_room
+        assert by_room["TR+20"].free_until == 675
+
+

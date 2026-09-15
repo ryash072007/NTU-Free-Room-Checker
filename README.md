@@ -160,6 +160,15 @@ Recess, revision/examination, orientation, outside-term, missing-semester, and
 unknown-room cases return explicit uncertainty statuses. They never translate an
 empty regular timetable into a claim that all rooms are physically free.
 
+### Room transition changeover rule
+
+Intervals of 10 minutes or less between room bookings/classes are treated as room transition time, not usable free-room availability:
+- Scheduled meeting times remain unchanged.
+- This affects availability and free-gap calculation only (consecutive classes separated by $\le 10$ minutes coalesce into continuous occupied blocks for availability).
+- Gaps $> 10$ minutes remain eligible as genuine free intervals.
+- Transitions adjacent to uncertain intervals remain uncertain rather than confidently free or confirmed occupied.
+
+
 ## Web Frontend
 
 A responsive React/TypeScript/Vite web application is available under `web/`. It connects to the FastAPI backend and provides:

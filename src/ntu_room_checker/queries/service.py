@@ -6,7 +6,13 @@ from pathlib import Path
 from ntu_room_checker.normalization.day_parser import day_number
 from ntu_room_checker.normalization.time_parser import parse_clock
 from ntu_room_checker.normalization.venue import normalize_venue
-from ntu_room_checker.queries.models import FreeRoom, OccupiedInterval, RoomMeeting, RoomSummary
+from ntu_room_checker.queries.models import (
+    ROOM_TRANSITION_MINUTES,
+    FreeRoom,
+    OccupiedInterval,
+    RoomMeeting,
+    RoomSummary,
+)
 
 
 def overlaps(start: int, end: int, requested_start: int, requested_end: int) -> bool:
@@ -23,6 +29,27 @@ def _connect_sqlite(path: Path) -> sqlite3.Connection:
         if not resolved.startswith("/"):
             resolved = "/" + resolved
         return sqlite3.connect(f"file:{resolved}?immutable=1", uri=True, check_same_thread=False)
+
+
+def coalesce_occupied_intervals(
+    meetings: list[RoomMeeting] | tuple[RoomMeeting, ...],
+    transition_minutes: int = ROOM_TRANSITION_MINUTES,
+) -> list[OccupiedInterval]:
+    sorted_meetings = sorted(meetings, key=lambda m: (m.start_minute, m.end_minute, m.meeting_id))
+    merged: list[OccupiedInterval] = []
+    for meeting in sorted_meetings:
+        if merged and meeting.start_minute - merged[-1].end_minute <= transition_minutes:
+            previous = merged[-1]
+            merged[-1] = OccupiedInterval(
+                previous.start_minute,
+                max(previous.end_minute, meeting.end_minute),
+                previous.meeting_ids + (meeting.meeting_id,),
+            )
+        else:
+            merged.append(
+                OccupiedInterval(meeting.start_minute, meeting.end_minute, (meeting.meeting_id,))
+            )
+    return merged
 
 
 class TimetableQueries:
@@ -243,20 +270,7 @@ class TimetableQueries:
 
     def occupied_intervals(self, *args: object, **kwargs: object) -> list[OccupiedInterval]:
         meetings = self.get_room_schedule(*args, **kwargs)
-        merged: list[OccupiedInterval] = []
-        for meeting in meetings:
-            if merged and meeting.start_minute < merged[-1].end_minute:
-                previous = merged[-1]
-                merged[-1] = OccupiedInterval(
-                    previous.start_minute,
-                    max(previous.end_minute, meeting.end_minute),
-                    previous.meeting_ids + (meeting.meeting_id,),
-                )
-            else:
-                merged.append(
-                    OccupiedInterval(meeting.start_minute, meeting.end_minute, (meeting.meeting_id,))
-                )
-        return merged
+        return coalesce_occupied_intervals(meetings, ROOM_TRANSITION_MINUTES)
 
     def find_free_rooms(
         self,
@@ -274,39 +288,23 @@ class TimetableQueries:
         end = start + duration_minutes
         if not 0 <= start < end <= 24 * 60:
             raise ValueError("requested interval must fall within one day")
-        run_id = self._normalization_run(academic_year, semester)
-        day = day_number(day_of_week)
-        week_sql, week_args = self._week_sql(teaching_week, "m")
-        # Any physical meeting with an unknown day or time disqualifies its room.
-        # This errs toward false occupancy, never false availability.
-        rows = self.connection.execute(
-            f"""SELECT r.id,r.venue_display FROM rooms r
-                WHERE r.normalization_run_id=? AND r.venue_type='physical_room'
-                  AND NOT EXISTS (
-                    SELECT 1 FROM class_meetings m JOIN canonical_classes cc
-                      ON cc.id=m.canonical_class_id
-                    WHERE m.room_id=r.id AND cc.normalization_run_id=?
-                      AND (m.day_parse_status!='parsed' OR m.time_parse_status!='parsed')
-                      AND {week_sql}
-                  )
-                  AND NOT EXISTS (
-                    SELECT 1 FROM class_meetings m JOIN canonical_classes cc
-                      ON cc.id=m.canonical_class_id
-                    WHERE m.room_id=r.id AND cc.normalization_run_id=?
-                      AND m.day_of_week=? AND m.start_minute<? AND m.end_minute>?
-                      AND {week_sql}
-                  )
-                ORDER BY r.venue_display""",
-            (run_id, run_id, *week_args, run_id, day, end, start, *week_args),
-        ).fetchall()
+        rooms = self.physical_rooms(academic_year, semester)
+        unparsed = self.rooms_with_unparsed_meetings(
+            academic_year, semester, teaching_week=teaching_week
+        )
+        schedules = self.get_room_schedules(
+            academic_year, semester, day_of_week, teaching_week=teaching_week
+        )
         results: list[FreeRoom] = []
-        for row in rows:
-            next_start = self.connection.execute(
-                f"""SELECT MIN(m.start_minute) FROM class_meetings m
-                    JOIN canonical_classes cc ON cc.id=m.canonical_class_id
-                    WHERE m.room_id=? AND cc.normalization_run_id=? AND m.day_of_week=?
-                      AND m.time_parse_status='parsed' AND m.start_minute>=? AND {week_sql}""",
-                (row["id"], run_id, day, end, *week_args),
-            ).fetchone()[0]
-            results.append(FreeRoom(row["venue_display"], start, end, next_start))
+        for room in rooms:
+            if room in unparsed:
+                continue
+            occupied = coalesce_occupied_intervals(schedules.get(room, ()), ROOM_TRANSITION_MINUTES)
+            if any(overlaps(interval.start_minute, interval.end_minute, start, end) for interval in occupied):
+                continue
+            next_start = min(
+                (interval.start_minute for interval in occupied if interval.start_minute >= end),
+                default=None,
+            )
+            results.append(FreeRoom(room, start, end, next_start))
         return results

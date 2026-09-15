@@ -10,7 +10,12 @@ from ntu_room_checker.calendar.models import DateResolution
 from ntu_room_checker.calendar.policy import ApplicabilityStatus, DatePolicyResult, TimetableAuthority
 from ntu_room_checker.normalization.venue import normalize_venue
 from ntu_room_checker.queries.models import (
-    EvaluatedMeeting, FreeRoom, OccupiedInterval, RoomMeeting, UncertainRoom,
+    ROOM_TRANSITION_MINUTES,
+    EvaluatedMeeting,
+    FreeRoom,
+    OccupiedInterval,
+    RoomMeeting,
+    UncertainRoom,
 )
 from ntu_room_checker.queries.service import TimetableQueries, overlaps
 
@@ -60,6 +65,91 @@ class RoomAvailabilityResult:
     uncertainty_reason_codes: tuple[str, ...] = ()
     uncertainty_reasons: tuple[str, ...] = ()
     evaluated_meetings: tuple[EvaluatedMeeting, ...] = ()
+    uncertain_intervals: tuple[tuple[int, int], ...] = ()
+
+
+def coalesce_evaluated_blocks(
+    confirmed_intervals: list[tuple[int, int, int]],
+    uncertain_intervals: list[tuple[int, int, EvaluatedMeeting]],
+    transition_minutes: int = ROOM_TRANSITION_MINUTES,
+) -> tuple[list[tuple[int, int, tuple[int, ...]]], list[tuple[int, int, tuple[EvaluatedMeeting, ...]]]]:
+    endpoints: set[int] = set()
+    for s, e, _ in confirmed_intervals:
+        endpoints.add(s)
+        endpoints.add(e)
+    for s, e, _ in uncertain_intervals:
+        endpoints.add(s)
+        endpoints.add(e)
+    if not endpoints:
+        return [], []
+
+    sorted_pts = sorted(endpoints)
+    segments: list[dict[str, object]] = []
+    for i in range(len(sorted_pts) - 1):
+        s = sorted_pts[i]
+        e = sorted_pts[i + 1]
+        c_matches = [m_id for cs, ce, m_id in confirmed_intervals if cs < e and ce > s]
+        u_matches = [item for us, ue, item in uncertain_intervals if us < e and ue > s]
+        if c_matches:
+            segments.append({
+                "start": s, "end": e, "type": "confirmed",
+                "meeting_ids": tuple(c_matches), "uncertain_items": (),
+            })
+        elif u_matches:
+            segments.append({
+                "start": s, "end": e, "type": "uncertain",
+                "meeting_ids": (), "uncertain_items": tuple(u_matches),
+            })
+        else:
+            segments.append({
+                "start": s, "end": e, "type": "gap",
+                "meeting_ids": (), "uncertain_items": (),
+            })
+
+    merged_segments: list[dict[str, object]] = []
+    for seg in segments:
+        if merged_segments and merged_segments[-1]["type"] == seg["type"]:
+            prev = merged_segments[-1]
+            prev["end"] = seg["end"]
+            prev["meeting_ids"] = tuple(dict.fromkeys(tuple(prev["meeting_ids"]) + tuple(seg["meeting_ids"])))  # type: ignore[arg-type]
+            prev["uncertain_items"] = tuple(dict.fromkeys(tuple(prev["uncertain_items"]) + tuple(seg["uncertain_items"])))  # type: ignore[arg-type]
+        else:
+            merged_segments.append(dict(seg))
+
+    for i, seg in enumerate(merged_segments):
+        if seg["type"] == "gap":
+            gap_len = int(seg["end"]) - int(seg["start"])  # type: ignore[arg-type]
+            if gap_len <= transition_minutes:
+                left = merged_segments[i - 1] if i > 0 else None
+                right = merged_segments[i + 1] if i + 1 < len(merged_segments) else None
+                if left and right:
+                    if left["type"] == "confirmed" and right["type"] == "confirmed":
+                        seg["type"] = "confirmed"
+                        seg["meeting_ids"] = tuple(dict.fromkeys(tuple(left["meeting_ids"]) + tuple(right["meeting_ids"])))  # type: ignore[arg-type]
+                    else:
+                        seg["type"] = "uncertain"
+                        u_items = tuple(left.get("uncertain_items", ())) + tuple(right.get("uncertain_items", ()))  # type: ignore[arg-type]
+                        seg["uncertain_items"] = tuple(dict.fromkeys(u_items))
+
+    final_segments: list[dict[str, object]] = []
+    for seg in merged_segments:
+        if final_segments and final_segments[-1]["type"] == seg["type"]:
+            prev = final_segments[-1]
+            prev["end"] = seg["end"]
+            prev["meeting_ids"] = tuple(dict.fromkeys(tuple(prev["meeting_ids"]) + tuple(seg["meeting_ids"])))  # type: ignore[arg-type]
+            prev["uncertain_items"] = tuple(dict.fromkeys(tuple(prev["uncertain_items"]) + tuple(seg["uncertain_items"])))  # type: ignore[arg-type]
+        else:
+            final_segments.append(dict(seg))
+
+    confirmed_out = [
+        (int(seg["start"]), int(seg["end"]), tuple(seg["meeting_ids"]))  # type: ignore[arg-type]
+        for seg in final_segments if seg["type"] == "confirmed"
+    ]
+    uncertain_out = [
+        (int(seg["start"]), int(seg["end"]), tuple(seg["uncertain_items"]))  # type: ignore[arg-type]
+        for seg in final_segments if seg["type"] == "uncertain"
+    ]
+    return confirmed_out, uncertain_out
 
 
 class CalendarTimetableService:
@@ -254,55 +344,76 @@ class CalendarTimetableService:
             ))
             for meeting in meetings
         )
-        occupied: list[OccupiedInterval] = []
-        uncertainties: list[EvaluatedMeeting] = []
-        future_boundaries: list[int] = []
+        raw_confirmed: list[tuple[int, int, int]] = []
+        raw_uncertain: list[tuple[int, int, EvaluatedMeeting]] = []
+        raw_meeting_intervals: list[tuple[int, int]] = []
+
         for item in evaluated:
             result = item.applicability
-            if result.status == ApplicabilityStatus.UNCERTAIN:
-                confirmed_overlap = tuple(
-                    interval for interval in result.confirmed_intervals
-                    if overlaps(*interval, start, end)
-                )
-                if confirmed_overlap:
-                    occupied.extend(
-                        OccupiedInterval(a, b, (item.meeting.meeting_id,))
-                        for a, b in confirmed_overlap
-                    )
-                    continue
-                if any(overlaps(*interval, start, end) for interval in result.uncertain_intervals):
-                    uncertainties.append(item)
-                future_boundaries.extend(
-                    interval[0] for interval in result.confirmed_intervals + result.uncertain_intervals
-                    if interval[0] >= end
-                )
-                continue
-            if result.status != ApplicabilityStatus.APPLICABLE:
-                continue
-            assert result.effective_start is not None and result.effective_end is not None
-            if overlaps(result.effective_start, result.effective_end, start, end):
-                occupied.append(OccupiedInterval(
-                    result.effective_start, result.effective_end, (item.meeting.meeting_id,)
-                ))
-            elif result.effective_start >= end:
-                future_boundaries.append(result.effective_start)
-        if occupied:
+            if result.status == ApplicabilityStatus.APPLICABLE:
+                assert result.effective_start is not None and result.effective_end is not None
+                raw_confirmed.append((result.effective_start, result.effective_end, item.meeting.meeting_id))
+                raw_meeting_intervals.append((result.effective_start, result.effective_end))
+            elif result.status == ApplicabilityStatus.UNCERTAIN:
+                for c_start, c_end in result.confirmed_intervals:
+                    raw_confirmed.append((c_start, c_end, item.meeting.meeting_id))
+                    raw_meeting_intervals.append((c_start, c_end))
+                for u_start, u_end in result.uncertain_intervals:
+                    raw_uncertain.append((u_start, u_end, item))
+
+        coalesced_confirmed, coalesced_uncertain = coalesce_evaluated_blocks(
+            raw_confirmed, raw_uncertain, ROOM_TRANSITION_MINUTES
+        )
+
+        matching_confirmed = [
+            OccupiedInterval(b[0], b[1], b[2])
+            for b in coalesced_confirmed
+            if overlaps(b[0], b[1], start, end)
+        ]
+
+        if matching_confirmed:
+            overlaps_class = any(overlaps(ms, me, start, end) for ms, me in raw_meeting_intervals)
+            if overlaps_class:
+                reason = "At least one applicable timetable meeting overlaps the request."
+                codes: tuple[str, ...] = ()
+                reasons: tuple[str, ...] = ()
+            else:
+                reason = "The room is in transition between consecutive classes."
+                codes = ("room_transition_buffer",)
+                reasons = ("The room is in transition between consecutive classes.",)
             return RoomAvailabilityResult(
                 resolution, AvailabilityStatus.OCCUPIED,
-                "At least one applicable timetable meeting overlaps the request.",
-                room, start, end, False, None, tuple(occupied),
+                reason,
+                room, start, end, False, None, tuple(matching_confirmed),
+                uncertainty_reason_codes=codes,
+                uncertainty_reasons=reasons,
                 evaluated_meetings=evaluated,
             )
-        if uncertainties:
-            codes = tuple(dict.fromkeys(item.applicability.reason_code for item in uncertainties))
-            reasons = tuple(dict.fromkeys(item.applicability.reason for item in uncertainties))
+
+        matching_uncertain = [
+            b for b in coalesced_uncertain
+            if overlaps(b[0], b[1], start, end)
+        ]
+
+        if matching_uncertain:
+            all_u_items = [u for b in matching_uncertain for u in b[2]]
+            codes = tuple(dict.fromkeys(item.applicability.reason_code for item in all_u_items))
+            reasons = tuple(dict.fromkeys(item.applicability.reason for item in all_u_items))
+            uncertain_intervals = tuple((b[0], b[1]) for b in matching_uncertain)
             return RoomAvailabilityResult(
                 resolution, AvailabilityStatus.UNCERTAIN,
                 "Meeting applicability is uncertain; the room is not classified as free.",
                 room, start, end, None, None,
-                uncertainty_reason_codes=codes, uncertainty_reasons=reasons,
+                uncertainty_reason_codes=codes or ("calendar_exception_uncertain",),
+                uncertainty_reasons=reasons or ("Meeting applicability is uncertain; the room is not classified as free.",),
                 evaluated_meetings=evaluated,
+                uncertain_intervals=uncertain_intervals,
             )
+
+        future_boundaries = [
+            b[0] for b in (coalesced_confirmed + coalesced_uncertain)
+            if b[0] >= end
+        ]
         return RoomAvailabilityResult(
             resolution, AvailabilityStatus.FREE,
             "No applicable or uncertain timetable meeting overlaps the request.",

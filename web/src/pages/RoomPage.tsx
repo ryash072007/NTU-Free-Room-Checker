@@ -5,7 +5,15 @@ import { getRoomAvailability, getRoomSchedule } from "../api/rooms";
 import type { Meeting, RoomAvailabilityResponse, RoomScheduleResponse } from "../api/types";
 import { CalendarContextLine } from "../components/CalendarContextLine";
 import { StatusMessage, friendlyApiError } from "../components/StatusMessage";
-import { clockToMinutes, formatDuration, shiftIsoDate, singaporeDateTime } from "../utils/time";
+import {
+  ROOM_TRANSITION_MINUTES,
+  clockToMinutes,
+  formatDuration,
+  shiftIsoDate,
+  singaporeDateTime,
+} from "../utils/time";
+
+export { ROOM_TRANSITION_MINUTES };
 
 type TimelineItem =
   | { kind: "free"; start: string; end: string }
@@ -30,7 +38,7 @@ export function buildTimeline(meetings: Meeting[], safeToInferGaps: boolean): Ti
     const [start, end] = effectiveRange(meeting);
     const startMinute = clockToMinutes(start);
     const endMinute = clockToMinutes(end);
-    if (cursor !== null && startMinute > cursor) {
+    if (cursor !== null && startMinute - cursor > ROOM_TRANSITION_MINUTES) {
       items.push({ kind: "free", start: minuteLabel(cursor), end: start });
     }
     items.push({ kind: "meeting", meeting });
