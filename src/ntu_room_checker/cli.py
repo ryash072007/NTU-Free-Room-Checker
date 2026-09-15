@@ -10,7 +10,7 @@ from ntu_room_checker.normalization.profiling import profile_database, top_value
 from ntu_room_checker.normalization.runner import normalize_database
 from ntu_room_checker.normalization.statistics import normalization_statistics
 from ntu_room_checker.queries import TimetableQueries
-from ntu_room_checker.calendar import default_resolver
+from ntu_room_checker.calendar import CalendarPolicyEngine, default_resolver
 from ntu_room_checker.queries import CalendarTimetableService
 from ntu_room_checker.normalization.time_parser import parse_clock
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     normalize.add_argument("--stats", action="store_true", help="Print resulting counts")
     calendar_date = commands.add_parser("calendar-date", help="Resolve an ISO date")
     calendar_date.add_argument("date")
+    calendar_date.add_argument("--verbose", action="store_true", help="Include policy decision")
     room = commands.add_parser("room-schedule", help="Print a normalized room schedule")
     room.add_argument("room")
     _add_query_term_arguments(room)
@@ -62,6 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
     free.add_argument("--duration", required=True, type=_positive_int)
     free.add_argument("--week", type=_positive_int)
     free.add_argument("--limit", type=_positive_int, default=50)
+    free.add_argument(
+        "--include-uncertain", action="store_true",
+        help="Return uncertain rooms separately from confidently free rooms",
+    )
     availability = commands.add_parser(
         "room-availability", help="Check one room for a calendar date/time"
     )
@@ -70,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
     availability.add_argument("--date", required=True)
     availability.add_argument("--time", required=True, help="HHMM or HH:MM")
     availability.add_argument("--duration", required=True, type=_positive_int)
+    availability.add_argument(
+        "--explain", action="store_true", help="Include per-meeting policy decisions"
+    )
     return parser
 
 
@@ -134,7 +142,11 @@ def main() -> None:
             print(json.dumps(payload, indent=2))
         return
     if args.command == "calendar-date":
-        _print_json(_json_result(default_resolver().resolve(args.date)))
+        resolution = default_resolver().resolve(args.date)
+        payload = _json_result(resolution)
+        if args.verbose:
+            payload["policy"] = _json_result(CalendarPolicyEngine().evaluate_date(resolution))
+        _print_json(payload)
         return
     if args.command == "room-schedule":
         if args.date:
@@ -155,9 +167,12 @@ def main() -> None:
             minute = parse_clock(args.time)
             instant = f"{args.date}T{minute // 60:02d}:{minute % 60:02d}"
             with CalendarTimetableService(args.db) as service:
-                result = service.find_free_rooms_for_datetime(instant, args.duration)
+                result = service.find_free_rooms_for_datetime(
+                    instant, args.duration, include_uncertain=args.include_uncertain
+                )
             payload = _json_result(result)
             payload["rooms"] = list(payload["rooms"])[: args.limit]  # type: ignore[arg-type]
+            payload["uncertain_rooms"] = list(payload["uncertain_rooms"])[: args.limit]  # type: ignore[arg-type]
             _print_json(payload)
             return
         _require_legacy_query_args(args)
@@ -175,7 +190,10 @@ def main() -> None:
             result = service.get_room_availability_for_datetime(
                 args.room, instant, args.duration
             )
-        _print_json(_json_result(result))
+        payload = _json_result(result)
+        if not args.explain:
+            payload.pop("evaluated_meetings", None)
+        _print_json(payload)
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:
