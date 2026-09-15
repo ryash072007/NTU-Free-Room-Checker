@@ -46,16 +46,25 @@ class PublicHoliday:
 class AcademicCalendar:
     academic_year: int
     label: str
+    coverage_start: date
+    coverage_end: date
     periods: tuple[CalendarPeriod, ...]
     public_holidays: tuple[PublicHoliday, ...]
     source: str
     notes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.coverage_start > self.coverage_end:
+            raise ValueError("academic calendar coverage start must not follow its end")
         ordered = sorted(self.periods, key=lambda period: period.start)
         for previous, current in zip(ordered, ordered[1:]):
             if previous.end >= current.start:
                 raise ValueError(f"overlapping calendar periods: {previous} and {current}")
+        if any(
+            period.start < self.coverage_start or period.end > self.coverage_end
+            for period in self.periods
+        ):
+            raise ValueError("calendar period falls outside declared coverage")
 
 
 @dataclass(frozen=True, slots=True)

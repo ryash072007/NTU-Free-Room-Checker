@@ -139,6 +139,13 @@ def test_dates_outside_encoded_periods_are_not_available(value: str) -> None:
     assert not result.regular_timetable_applicable
 
 
+def test_gap_inside_calendar_retains_academic_year_context() -> None:
+    result = default_resolver().resolve("2026-09-27")
+    assert result.academic_year_label == "AY2026-27"
+    assert result.semester is None
+    assert result.period_type == PeriodType.OUTSIDE_TERM
+
+
 def test_requested_example_resolves_to_semester_one_week_six() -> None:
     result = default_resolver().resolve(date(2026, 9, 15))
     assert (result.academic_year, result.semester, result.teaching_week, result.weekday) == (
