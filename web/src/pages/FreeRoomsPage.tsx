@@ -5,7 +5,7 @@ import { findFreeRooms } from "../api/rooms";
 import type { FreeRoomItem, FreeRoomsResponse } from "../api/types";
 import { CalendarContextLine } from "../components/CalendarContextLine";
 import { StatusMessage, friendlyApiError } from "../components/StatusMessage";
-import { formatDuration, roundedSingaporeDateTime, singaporeDateTime } from "../utils/time";
+import { clockToMinutes, formatDuration, roundedSingaporeDateTime, singaporeDateTime } from "../utils/time";
 
 const DURATION_PRESETS = [30, 60, 120, 180];
 
@@ -41,6 +41,11 @@ export function FreeRoomsPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!Number.isFinite(duration) || duration < 1 || duration > 1440 || clockToMinutes(time) + duration > 1440) {
+      setResult(null);
+      setError("Choose a positive duration that ends before midnight Singapore time.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {

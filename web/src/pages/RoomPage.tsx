@@ -24,17 +24,18 @@ export function buildTimeline(meetings: Meeting[], safeToInferGaps: boolean): Ti
   );
   if (!safeToInferGaps) return sorted.map((meeting) => ({ kind: "meeting", meeting }));
   const items: TimelineItem[] = [];
-  let cursor = 8 * 60;
+  let cursor: number | null = null;
   for (const meeting of sorted) {
     if (meeting.applicability === "not_applicable") continue;
     const [start, end] = effectiveRange(meeting);
     const startMinute = clockToMinutes(start);
     const endMinute = clockToMinutes(end);
-    if (startMinute > cursor) items.push({ kind: "free", start: minuteLabel(cursor), end: start });
+    if (cursor !== null && startMinute > cursor) {
+      items.push({ kind: "free", start: minuteLabel(cursor), end: start });
+    }
     items.push({ kind: "meeting", meeting });
-    cursor = Math.max(cursor, endMinute);
+    cursor = Math.max(cursor ?? endMinute, endMinute);
   }
-  if (cursor < 22 * 60) items.push({ kind: "free", start: minuteLabel(cursor), end: "22:00" });
   return items;
 }
 
@@ -77,8 +78,7 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
 }
 
 export function RoomPage() {
-  const parameter = useParams().room ?? "";
-  const room = decodeURIComponent(parameter);
+  const room = useParams().room ?? "";
   const now = useMemo(() => singaporeDateTime(), []);
   const [date, setDate] = useState(now.date);
   const [schedule, setSchedule] = useState<RoomScheduleResponse | null>(null);
