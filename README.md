@@ -205,6 +205,6 @@ docker build -t ntu-free-room-checker .
 docker run --rm -p 8000:8000 -e NTU_ROOM_CHECKER_DB=/data/ntu_schedule.db -v "${PWD}\data:/data:ro" ntu-free-room-checker
 ```
 
-See [deployment.md](docs/deployment.md) for complete architecture, caching behavior, volume mounting, and environment configuration.
+See [RUNNING.md](RUNNING.md) for quick-start running commands across production, Docker, and development environments, and [deployment.md](docs/deployment.md) for complete architecture, caching behavior, volume mounting, and environment configuration.
 
 
