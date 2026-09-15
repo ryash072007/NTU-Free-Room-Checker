@@ -7,6 +7,9 @@ from ntu_room_checker.normalization.models import VenueResult
 UNKNOWN_VALUES = {"TBA", "TBC", "NIL", "N/A", "NA"}
 ONLINE_VALUES = {"ONLINE"}
 OTHER_VALUES = {"OVERSEAS"}
+DATE_EXPRESSION = re.compile(
+    r"\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b"
+)
 
 
 def normalize_venue(raw: str) -> VenueResult:
@@ -22,7 +25,7 @@ def normalize_venue(raw: str) -> VenueResult:
         venue_type = "online"
     elif normalized in UNKNOWN_VALUES:
         venue_type = "unknown"
-    elif normalized in OTHER_VALUES:
+    elif normalized in OTHER_VALUES or DATE_EXPRESSION.search(normalized):
         venue_type = "other"
     else:
         venue_type = "physical_room"

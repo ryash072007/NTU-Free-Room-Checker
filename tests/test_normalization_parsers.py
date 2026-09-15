@@ -44,7 +44,7 @@ def test_days_are_iso_numbered_and_missing_is_not_fabricated() -> None:
 
 @pytest.mark.parametrize(
     ("raw", "normalized", "kind"),
-    [(" LHN-TR+15 ", "LHN-TR+15", "physical_room"), ("online", "ONLINE", "online"), ("TBA", "TBA", "unknown"), ("", "", "none"), ("overseas", "OVERSEAS", "other")],
+    [(" LHN-TR+15 ", "LHN-TR+15", "physical_room"), ("online", "ONLINE", "online"), ("TBA", "TBA", "unknown"), ("", "", "none"), ("overseas", "OVERSEAS", "other"), ("4&11 AUG", "4&11 AUG", "other")],
 )
 def test_conservative_venue_classification(raw: str, normalized: str, kind: str) -> None:
     result = normalize_venue(raw)
