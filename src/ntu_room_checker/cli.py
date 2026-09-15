@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ntu_room_checker.scraper.browser import browser_page
 from ntu_room_checker.normalization.profiling import profile_database, top_values
+from ntu_room_checker.normalization.runner import normalize_database
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
 
@@ -37,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     profile = commands.add_parser("profile", help="Profile immutable raw schedule data")
     profile.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
     profile.add_argument("--top", type=_positive_int, default=20)
+    normalize = commands.add_parser("normalize", help="Build canonical timetable tables")
+    normalize.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    normalize.add_argument("--source-run", type=_positive_int)
+    normalize.add_argument("--rebuild", action="store_true")
+    normalize.add_argument("--stats", action="store_true", help="Print resulting counts")
     return parser
 
 
@@ -64,6 +70,15 @@ def main() -> None:
         payload["day_values"] = top_values(args.db, "day", 20)
         payload["time_values"] = top_values(args.db, "time", args.top)
         print(json.dumps(payload, indent=2))
+        return
+    if args.command == "normalize":
+        summary = normalize_database(
+            args.db, source_scrape_run_id=args.source_run, rebuild=args.rebuild
+        )
+        if args.stats:
+            from dataclasses import asdict
+
+            print(json.dumps(asdict(summary), indent=2))
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:
