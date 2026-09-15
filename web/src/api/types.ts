@@ -121,3 +121,34 @@ export interface RoomAvailabilityResponse {
 export interface ApiErrorPayload {
   error?: { code?: string; message?: string };
 }
+
+export interface LocationItem {
+  id: string;
+  name: string;
+  official_name: string | null;
+  short_name: string;
+  aliases: string[];
+  room_count: number;
+}
+
+export interface LocationRoomItem {
+  room: string;
+  status: AvailabilityStatus;
+  is_free: boolean | null;
+  free_until: string | null;
+  free_duration_minutes: number | null;
+  available_from: string | null;
+  reason_codes: string[];
+  reasons: string[];
+}
+
+export interface LocationRoomsResponse {
+  location: LocationItem;
+  date: string;
+  requested_time: string;
+  duration_minutes: number;
+  status: AvailabilityStatus | "ok";
+  reason: string;
+  calendar: CalendarContext;
+  rooms: LocationRoomItem[];
+}
