@@ -139,12 +139,12 @@ def normalize_database(
                        GROUP BY venue_normalized,venue_type""",
                     (normalization_run_id,),
                 ).fetchall()
-                for normalized, display, venue_type, examples in room_rows:
+                for normalized, _raw_display, venue_type, examples in room_rows:
                     cursor = c.execute(
                         """INSERT INTO rooms
                            (normalization_run_id,venue_normalized,venue_display,venue_type,venue_raw_examples)
                            VALUES (?,?,?,?,?)""",
-                        (normalization_run_id, normalized, display, venue_type, examples),
+                        (normalization_run_id, normalized, normalized, venue_type, examples),
                     )
                     c.execute(
                         """UPDATE class_meetings SET room_id=? WHERE venue_normalized=?

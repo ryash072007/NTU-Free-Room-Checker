@@ -8,6 +8,7 @@ from pathlib import Path
 from ntu_room_checker.scraper.browser import browser_page
 from ntu_room_checker.normalization.profiling import profile_database, top_values
 from ntu_room_checker.normalization.runner import normalize_database
+from ntu_room_checker.normalization.statistics import normalization_statistics
 from ntu_room_checker.queries import TimetableQueries
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
@@ -103,7 +104,9 @@ def main() -> None:
         if args.stats:
             from dataclasses import asdict
 
-            print(json.dumps(asdict(summary), indent=2))
+            payload = asdict(summary)
+            payload.update(normalization_statistics(args.db, summary.normalization_run_id))
+            print(json.dumps(payload, indent=2))
         return
     if args.command == "room-schedule":
         with TimetableQueries(args.db) as queries:

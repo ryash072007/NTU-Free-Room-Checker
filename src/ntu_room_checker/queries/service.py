@@ -71,8 +71,9 @@ class TimetableQueries:
             f"""SELECT m.id,cc.course_code,cc.course_title,cc.index_number,cc.class_type,
                        cc.group_name,m.day_of_week,m.start_minute,m.end_minute,
                        m.venue_normalized,m.remark_raw,m.week_parse_status,
-                       (SELECT group_concat(teaching_week, ',') FROM meeting_weeks
-                        WHERE meeting_id=m.id ORDER BY teaching_week) week_numbers,
+                       (SELECT group_concat(teaching_week, ',') FROM
+                          (SELECT teaching_week FROM meeting_weeks
+                           WHERE meeting_id=m.id ORDER BY teaching_week)) week_numbers,
                        (SELECT COUNT(*) FROM meeting_source_entries WHERE meeting_id=m.id) source_count
                 FROM class_meetings m JOIN canonical_classes cc ON cc.id=m.canonical_class_id
                 WHERE cc.normalization_run_id=? AND m.venue_normalized=?
