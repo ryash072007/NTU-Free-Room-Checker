@@ -78,6 +78,13 @@ class CalendarTimetableService:
             return DateScheduleResult(
                 resolution, "normalized_timetable_unavailable", str(error), (),
             )
+        if resolution.exceptions:
+            return DateScheduleResult(
+                resolution,
+                "ok_with_calendar_exception",
+                "The date has a scoped calendar exception that is not automatically applied to timetable rows.",
+                tuple(meetings),
+            )
         return DateScheduleResult(resolution, "ok", "", tuple(meetings))
 
     def find_free_rooms_for_datetime(
@@ -93,6 +100,24 @@ class CalendarTimetableService:
             return DateFreeRoomsResult(
                 resolution, "regular_timetable_not_applicable",
                 self._unavailable_reason(resolution), start, end, (),
+            )
+        overlapping_exceptions = tuple(
+            item
+            for item in resolution.exceptions
+            if item.start_minute < end and item.end_minute > start
+        )
+        if overlapping_exceptions:
+            populations = ", ".join(
+                sorted({item.affected_population for item in overlapping_exceptions})
+            )
+            return DateFreeRoomsResult(
+                resolution,
+                "calendar_exception_unapplied",
+                "A calendar no-class exception overlaps the request but cannot be safely "
+                f"matched to timetable rows ({populations}); room availability is unknown.",
+                start,
+                end,
+                (),
             )
         try:
             rooms = self.queries.find_free_rooms(

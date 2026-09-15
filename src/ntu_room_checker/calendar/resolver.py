@@ -26,6 +26,9 @@ class CalendarResolver:
                 (item for item in calendar.public_holidays if item.date == target), None
             )
             period = next((item for item in calendar.periods if item.contains(target)), None)
+            exceptions = tuple(
+                item for item in calendar.exceptions if item.date == target
+            )
             return DateResolution(
                 date=target,
                 academic_year=calendar.academic_year,
@@ -43,6 +46,7 @@ class CalendarResolver:
                 holiday_observed=holiday.observed if holiday else False,
                 holiday_note=holiday.source_note if holiday else "",
                 source_note=period.source_note if period else "",
+                exceptions=exceptions,
             )
         return DateResolution(
             target, None, None, None, WEEKDAYS[weekday_number - 1], weekday_number,

@@ -43,6 +43,28 @@ class PublicHoliday:
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarException:
+    date: date
+    start_minute: int
+    end_minute: int
+    affected_population: str
+    description: str
+    source_note: str = ""
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.start_minute < self.end_minute <= 24 * 60:
+            raise ValueError("calendar exception must be a valid within-day interval")
+
+
+@dataclass(frozen=True, slots=True)
+class EarlyDismissalPolicy:
+    end_minute: int
+    holiday_names: tuple[str, ...]
+    description: str
+    source_note: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class AcademicCalendar:
     academic_year: int
     label: str
@@ -50,6 +72,8 @@ class AcademicCalendar:
     coverage_end: date
     periods: tuple[CalendarPeriod, ...]
     public_holidays: tuple[PublicHoliday, ...]
+    exceptions: tuple[CalendarException, ...]
+    early_dismissal_policies: tuple[EarlyDismissalPolicy, ...]
     source: str
     notes: tuple[str, ...] = ()
 
@@ -83,3 +107,4 @@ class DateResolution:
     holiday_observed: bool
     holiday_note: str
     source_note: str
+    exceptions: tuple[CalendarException, ...] = ()
