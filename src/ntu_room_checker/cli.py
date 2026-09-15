@@ -62,6 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
     free.add_argument("--duration", required=True, type=_positive_int)
     free.add_argument("--week", type=_positive_int)
     free.add_argument("--limit", type=_positive_int, default=50)
+    availability = commands.add_parser(
+        "room-availability", help="Check one room for a calendar date/time"
+    )
+    availability.add_argument("room")
+    availability.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    availability.add_argument("--date", required=True)
+    availability.add_argument("--time", required=True, help="HHMM or HH:MM")
+    availability.add_argument("--duration", required=True, type=_positive_int)
     return parser
 
 
@@ -159,6 +167,15 @@ def main() -> None:
                 teaching_week=args.week,
             )[: args.limit]
         print(json.dumps([_json_result(row) for row in rows], indent=2))
+        return
+    if args.command == "room-availability":
+        minute = parse_clock(args.time)
+        instant = f"{args.date}T{minute // 60:02d}:{minute % 60:02d}"
+        with CalendarTimetableService(args.db) as service:
+            result = service.get_room_availability_for_datetime(
+                args.room, instant, args.duration
+            )
+        _print_json(_json_result(result))
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:
