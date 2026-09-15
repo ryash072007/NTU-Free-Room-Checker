@@ -188,3 +188,5 @@ debug/
 *.db-wal
 playwright-report/
 tmp/
+node_modules/
+.vite/
