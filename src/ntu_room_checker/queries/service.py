@@ -39,6 +39,17 @@ class TimetableQueries:
             raise ValueError(f"No normalized data for AY {academic_year} semester {semester}")
         return int(row[0])
 
+    def physical_room_exists(
+        self, room: str, academic_year: str | int, semester: str | int
+    ) -> bool:
+        run_id = self._normalization_run(academic_year, semester)
+        normalized = normalize_venue(room).normalized
+        return self.connection.execute(
+            """SELECT 1 FROM rooms WHERE normalization_run_id=?
+               AND venue_normalized=? AND venue_type='physical_room'""",
+            (run_id, normalized),
+        ).fetchone() is not None
+
     @staticmethod
     def _week_sql(teaching_week: int | None, alias: str = "m") -> tuple[str, tuple[int, ...]]:
         if teaching_week is None:
