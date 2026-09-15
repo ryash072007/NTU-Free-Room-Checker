@@ -108,4 +108,23 @@ for example with Python's built-in `sqlite3` module or the SQLite CLI.
   their fingerprints make later cross-run comparisons straightforward.
 
 Free-room calculation, venue normalization, an API, and user interfaces are out
-of scope for this phase.
+of scope for the raw scraping phase.
+
+## Canonical timetable and room queries
+
+The derived normalization pipeline keeps the raw scraper tables immutable while
+building deterministic classes, meetings, rooms, parsed teaching weeks, and full
+source-row provenance. See [the normalization model](docs/timetable-normalization.md)
+for the measured data profile, deduplication rationale, conservative uncertainty
+rules, schema, parsing coverage, and query examples.
+
+Typical commands are:
+
+```powershell
+python -m ntu_room_checker profile
+python -m ntu_room_checker normalize --rebuild --stats
+python -m ntu_room_checker room-schedule "LHN-TR+15" --academic-year 2026 --semester 1 --day MON --week 3
+python -m ntu_room_checker free-rooms --academic-year 2026 --semester 1 --day MON --time 1430 --duration 120 --week 3
+```
+
+No HTTP API, frontend, or calendar-date mapping is included yet.
