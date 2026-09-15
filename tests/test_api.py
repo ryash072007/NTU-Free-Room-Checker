@@ -24,6 +24,7 @@ def api_db(tmp_path: Path) -> Path:
         ScheduleEntry("AB1004", "UNION", "3.0 AU", "", "10004", "TUT", "G4", "FRI", "1000-1200", "TR+15", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1005", "UNPARSED", "3.0 AU", "", "10005", "TUT", "G5", "", "unknown", "TR+17", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1006", "CONTAINS", "3.0 AU", "", "10006", "TUT", "G6", "TUE", "1200-1300", "NIE-LHN-B1-01", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1007", "LHN ID", "3.0 AU", "", "10007", "TUT", "G7", "TUE", "1900-2000", "LHN-TR+17", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1010", "CHAIN 1", "3.0 AU", "", "10010", "TUT", "G1", "TUE", "1030-1220", "LHN-TR+18", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1011", "CHAIN 2", "3.0 AU", "", "10011", "TUT", "G1", "TUE", "1230-1420", "LHN-TR+18", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1012", "CHAIN 3", "3.0 AU", "", "10012", "TUT", "G1", "TUE", "1430-1620", "LHN-TR+18", "Teaching Wk1-13", {}),
@@ -216,6 +217,8 @@ def test_openapi_documents_versioned_routes_and_nullable_is_free(client: TestCli
     schema = client.get("/openapi.json").json()
     assert "/api/v1/rooms/free" in schema["paths"]
     assert "/api/v1/rooms/{room}/availability" in schema["paths"]
+    assert "/api/v1/locations" in schema["paths"]
+    assert "/api/v1/locations/{location_id}/rooms" in schema["paths"]
     assert "RoomAvailabilityResponse" in schema["components"]["schemas"]
 
 
@@ -256,7 +259,7 @@ def test_location_list_contains_only_locations_with_known_rooms(client: TestClie
     by_id = {item["id"]: item for item in payload["locations"]}
     assert by_id["the-arc"]["name"] == "The Arc"
     assert by_id["the-arc"]["official_name"] == "Learning Hub North"
-    assert by_id["the-arc"]["room_count"] == 3
+    assert by_id["the-arc"]["room_count"] == 4
     assert by_id["north-spine"]["room_count"] == 2
 
 
@@ -265,7 +268,7 @@ def test_location_room_status_is_batched_sorted_and_preserves_names(client: Test
         "date": "2026-09-15", "time": "16:00",
     }).json()
     assert payload["status"] == "ok"
-    assert [room["status"] for room in payload["rooms"]] == ["free", "free", "occupied"]
+    assert [room["status"] for room in payload["rooms"]] == ["free", "free", "free", "occupied"]
     by_room = {room["room"]: room for room in payload["rooms"]}
     assert by_room["LHN-TR+17"]["room"] == "LHN-TR+17"
     assert by_room["LHN-TR+15"]["free_until"] == "17:00"
