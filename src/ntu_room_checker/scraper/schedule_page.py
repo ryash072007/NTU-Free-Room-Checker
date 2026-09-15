@@ -26,8 +26,10 @@ class ScheduleLandingPage:
             raise RuntimeError(f"NTU schedule page returned HTTP {response.status}")
         self.page.locator(PROGRAMME_SELECTOR).wait_for(timeout=self.timeout_ms)
         if academic_term and self.current_term().value != academic_term:
-            self.page.locator(ACADEMIC_TERM_SELECTOR).select_option(academic_term)
-            self.page.wait_for_load_state("domcontentloaded", timeout=self.timeout_ms)
+            with self.page.expect_navigation(
+                wait_until="domcontentloaded", timeout=self.timeout_ms
+            ):
+                self.page.locator(ACADEMIC_TERM_SELECTOR).select_option(academic_term)
             self.page.locator(PROGRAMME_SELECTOR).wait_for(timeout=self.timeout_ms)
 
     def terms(self) -> list[AcademicTerm]:
