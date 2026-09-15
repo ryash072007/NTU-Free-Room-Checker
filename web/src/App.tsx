@@ -1,8 +1,7 @@
-import { Link, Route, Routes } from "react-router-dom";
-
-function Placeholder({ title }: { title: string }) {
-  return <main className="page"><h1>{title}</h1></main>;
-}
+import { Link, NavLink, Route, Routes } from "react-router-dom";
+import { FreeRoomsPage } from "./pages/FreeRoomsPage";
+import { RoomPage } from "./pages/RoomPage";
+import { RoomSearchPage } from "./pages/RoomSearchPage";
 
 export default function App() {
   return (
@@ -13,14 +12,15 @@ export default function App() {
           <span><strong>Free Room</strong><small>Unofficial NTU utility</small></span>
         </Link>
         <nav aria-label="Primary navigation">
-          <Link to="/">Find a room</Link>
-          <Link to="/schedule">Room schedule</Link>
+          <NavLink to="/" end>Find a room</NavLink>
+          <NavLink to="/schedule">Room schedule</NavLink>
         </nav>
       </header>
       <Routes>
-        <Route path="/" element={<Placeholder title="Find a free room" />} />
-        <Route path="/schedule" element={<Placeholder title="Check room schedule" />} />
-        <Route path="/rooms/:room" element={<Placeholder title="Room schedule" />} />
+        <Route path="/" element={<FreeRoomsPage />} />
+        <Route path="/schedule" element={<RoomSearchPage />} />
+        <Route path="/rooms/:room" element={<RoomPage />} />
+        <Route path="*" element={<main className="page narrow-page"><h1>Page not found</h1><p className="intro">That page does not exist.</p><Link className="primary-button inline-button" to="/">Find a free room</Link></main>} />
       </Routes>
       <footer>Unofficial student utility · Always check room signage.</footer>
     </div>
