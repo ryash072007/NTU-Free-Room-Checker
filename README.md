@@ -127,11 +127,9 @@ python -m ntu_room_checker room-schedule "LHN-TR+15" --academic-year 2026 --seme
 python -m ntu_room_checker free-rooms --academic-year 2026 --semester 1 --day MON --time 1430 --duration 120 --week 3
 ```
 
-No frontend is included yet.
-
 ## HTTP API
 
-The versioned FastAPI backend is available without a frontend:
+The versioned FastAPI backend serves the REST API:
 
 ```powershell
 $env:NTU_ROOM_CHECKER_DB = "data/ntu_schedule.db"
@@ -161,3 +159,29 @@ python -m ntu_room_checker room-availability "LHN-TR+15" --date 2026-09-14 --tim
 Recess, revision/examination, orientation, outside-term, missing-semester, and
 unknown-room cases return explicit uncertainty statuses. They never translate an
 empty regular timetable into a claim that all rooms are physically free.
+
+## Web Frontend
+
+A responsive React/TypeScript/Vite web application is available under `web/`. It connects to the FastAPI backend and provides:
+- Confident free-room search with Singapore-time "Now" shortcut and duration presets
+- Safe separation of uncertain and non-applicable rooms
+- Debounced, keyboard-accessible room search handling rooms with `+`
+- Room timetable views with date navigation, calendar policy explanations, and authoritative free gaps
+
+### Local Development
+
+Start the backend:
+```powershell
+$env:NTU_ROOM_CHECKER_DB = "data/ntu_schedule.db"
+python -m ntu_room_checker serve --host 127.0.0.1 --port 8000
+```
+
+Start the web client:
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+See [web-frontend.md](docs/web-frontend.md) for architecture, configuration, testing, and production build instructions.
+
