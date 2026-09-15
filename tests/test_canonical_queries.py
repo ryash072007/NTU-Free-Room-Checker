@@ -83,3 +83,21 @@ def test_balanced_quote_is_only_a_normalized_alias() -> None:
     result = normalize_venue('"LT1A"')
     assert result.raw == '"LT1A"'
     assert result.normalized == "LT1A"
+
+
+def test_queries_cross_thread_and_read_only_support(tmp_path: Path) -> None:
+    import concurrent.futures
+
+    path = canonical_db(tmp_path)
+    queries = TimetableQueries(path)
+    try:
+        # Cross-thread query execution (AnyIO threadpool pattern)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            future = executor.submit(queries.search_rooms, "TR+", 5)
+            results = future.result()
+            assert len(results) >= 2
+    finally:
+        queries.close()
+
+    assert TimetableQueries.database_available(path) is True
+

@@ -13,9 +13,21 @@ def overlaps(start: int, end: int, requested_start: int, requested_end: int) -> 
     return start < requested_end and end > requested_start
 
 
+def _connect_sqlite(path: Path) -> sqlite3.Connection:
+    try:
+        connection = sqlite3.connect(path, check_same_thread=False)
+        connection.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        return connection
+    except sqlite3.OperationalError:
+        resolved = path.resolve().as_posix()
+        if not resolved.startswith("/"):
+            resolved = "/" + resolved
+        return sqlite3.connect(f"file:{resolved}?immutable=1", uri=True, check_same_thread=False)
+
+
 class TimetableQueries:
     def __init__(self, path: Path) -> None:
-        self.connection = sqlite3.connect(path)
+        self.connection = _connect_sqlite(path)
         self.connection.row_factory = sqlite3.Row
 
     def close(self) -> None:
@@ -26,7 +38,7 @@ class TimetableQueries:
         if not path.is_file():
             return False
         try:
-            connection = sqlite3.connect(path)
+            connection = _connect_sqlite(path)
             required = {"normalization_runs", "rooms", "class_meetings", "canonical_classes"}
             found = {
                 str(row[0])
