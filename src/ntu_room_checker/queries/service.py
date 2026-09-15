@@ -6,7 +6,7 @@ from pathlib import Path
 from ntu_room_checker.normalization.day_parser import day_number
 from ntu_room_checker.normalization.time_parser import parse_clock
 from ntu_room_checker.normalization.venue import normalize_venue
-from ntu_room_checker.queries.models import FreeRoom, OccupiedInterval, RoomMeeting
+from ntu_room_checker.queries.models import FreeRoom, OccupiedInterval, RoomMeeting, RoomSummary
 
 
 def overlaps(start: int, end: int, requested_start: int, requested_end: int) -> bool:
@@ -20,6 +20,29 @@ class TimetableQueries:
 
     def close(self) -> None:
         self.connection.close()
+
+    @staticmethod
+    def database_available(path: Path) -> bool:
+        if not path.is_file():
+            return False
+        try:
+            connection = sqlite3.connect(path)
+            required = {"normalization_runs", "rooms", "class_meetings", "canonical_classes"}
+            found = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            completed = connection.execute(
+                "SELECT 1 FROM normalization_runs WHERE status='completed' LIMIT 1"
+            ).fetchone()
+            return required <= found and completed is not None
+        except sqlite3.Error:
+            return False
+        finally:
+            if "connection" in locals():
+                connection.close()
 
     def __enter__(self) -> "TimetableQueries":
         return self
@@ -50,6 +73,16 @@ class TimetableQueries:
             (run_id, normalized),
         ).fetchone() is not None
 
+    def physical_room_exists_any(self, room: str) -> bool:
+        normalized = normalize_venue(room).normalized
+        return self.connection.execute(
+            """SELECT 1 FROM rooms r JOIN normalization_runs nr
+                 ON nr.id=r.normalization_run_id
+               WHERE nr.status='completed' AND r.venue_normalized=?
+                 AND r.venue_type='physical_room' LIMIT 1""",
+            (normalized,),
+        ).fetchone() is not None
+
     def physical_rooms(
         self, academic_year: str | int, semester: str | int
     ) -> list[str]:
@@ -63,6 +96,28 @@ class TimetableQueries:
                 (run_id,),
             )
         ]
+
+    def search_rooms(self, query: str, limit: int) -> list[RoomSummary]:
+        """Search distinct normalized physical rooms across completed runs."""
+        normalized_query = query.strip()
+        contains = f"%{normalized_query}%"
+        prefix = f"{normalized_query}%"
+        rows = self.connection.execute(
+            """SELECT r.venue_normalized,MIN(r.venue_display) AS venue_display,
+                      CASE
+                        WHEN r.venue_normalized = ? COLLATE NOCASE THEN 0
+                        WHEN r.venue_normalized LIKE ? COLLATE NOCASE THEN 1
+                        ELSE 2
+                      END AS rank
+               FROM rooms r JOIN normalization_runs nr ON nr.id=r.normalization_run_id
+               WHERE nr.status='completed' AND r.venue_type='physical_room'
+                 AND r.venue_normalized LIKE ? COLLATE NOCASE
+               GROUP BY r.venue_normalized
+               ORDER BY rank,LENGTH(r.venue_normalized),r.venue_normalized
+               LIMIT ?""",
+            (normalized_query, prefix, contains, limit),
+        ).fetchall()
+        return [RoomSummary(str(row["venue_normalized"]), str(row["venue_display"])) for row in rows]
 
     def rooms_with_unparsed_meetings(
         self, academic_year: str | int, semester: str | int,

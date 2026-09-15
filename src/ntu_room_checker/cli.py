@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from ntu_room_checker.scraper.browser import browser_page
@@ -15,11 +16,16 @@ from ntu_room_checker.queries import CalendarTimetableService
 from ntu_room_checker.normalization.time_parser import parse_clock
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
+from ntu_room_checker.api.config import ApiSettings
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ntu-room-checker")
     commands = parser.add_subparsers(dest="command", required=True)
+    serve = commands.add_parser("serve", help="Run the versioned HTTP API")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=_positive_int, default=8000)
+    serve.add_argument("--db", type=Path)
     scrape = commands.add_parser(
         "scrape", help="Scrape NTU public class schedules"
     )
@@ -122,6 +128,16 @@ def _require_legacy_query_args(args: argparse.Namespace) -> None:
 def main() -> None:
     args = build_parser().parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.command == "serve":
+        import uvicorn
+
+        from ntu_room_checker.api.app import create_app
+
+        settings = ApiSettings.from_environment()
+        if args.db is not None:
+            settings = replace(settings, database_path=args.db)
+        uvicorn.run(create_app(settings), host=args.host, port=args.port)
+        return
     if args.command == "profile":
         payload = profile_database(args.db).to_dict()
         payload["top_venues"] = top_values(args.db, "venue", args.top)

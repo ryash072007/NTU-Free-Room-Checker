@@ -123,6 +123,20 @@ class CalendarTimetableService:
             )
         return DateScheduleResult(resolution, "ok", "", tuple(meetings), evaluated)
 
+    def physical_room_exists_for_date(self, room: str, value: date | str) -> bool | None:
+        resolution = self.resolver.resolve(value)
+        if resolution.academic_year is None or resolution.semester is None:
+            return None
+        try:
+            return self.queries.physical_room_exists(
+                room, resolution.academic_year, resolution.semester
+            )
+        except ValueError:
+            return None
+
+    def physical_room_exists(self, room: str) -> bool:
+        return self.queries.physical_room_exists_any(room)
+
     def find_free_rooms_for_datetime(
         self, value: datetime | str, duration_minutes: int, *, include_uncertain: bool = False
     ) -> DateFreeRoomsResult:

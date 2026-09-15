@@ -55,3 +55,9 @@ class UncertainRoom:
     room: str
     reason_codes: tuple[str, ...]
     reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RoomSummary:
+    id: str
+    name: str
