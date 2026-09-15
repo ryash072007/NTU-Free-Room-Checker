@@ -8,6 +8,7 @@ from pathlib import Path
 from ntu_room_checker.scraper.browser import browser_page
 from ntu_room_checker.normalization.profiling import profile_database, top_values
 from ntu_room_checker.normalization.runner import normalize_database
+from ntu_room_checker.queries import TimetableQueries
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
 
@@ -43,7 +44,25 @@ def build_parser() -> argparse.ArgumentParser:
     normalize.add_argument("--source-run", type=_positive_int)
     normalize.add_argument("--rebuild", action="store_true")
     normalize.add_argument("--stats", action="store_true", help="Print resulting counts")
+    room = commands.add_parser("room-schedule", help="Print a normalized room schedule")
+    room.add_argument("room")
+    _add_query_term_arguments(room)
+    room.add_argument("--day", required=True)
+    room.add_argument("--week", type=_positive_int)
+    free = commands.add_parser("free-rooms", help="Find physical rooms free for an interval")
+    _add_query_term_arguments(free)
+    free.add_argument("--day", required=True)
+    free.add_argument("--time", required=True, help="HHMM or HH:MM")
+    free.add_argument("--duration", required=True, type=_positive_int)
+    free.add_argument("--week", type=_positive_int)
+    free.add_argument("--limit", type=_positive_int, default=50)
     return parser
+
+
+def _add_query_term_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    parser.add_argument("--academic-year", required=True)
+    parser.add_argument("--semester", required=True)
 
 
 def _positive_int(value: str) -> int:
@@ -58,6 +77,12 @@ def _nonnegative_float(value: str) -> float:
     if parsed < 0:
         raise argparse.ArgumentTypeError("must not be negative")
     return parsed
+
+
+def _json_result(value: object) -> dict[str, object]:
+    from dataclasses import asdict
+
+    return asdict(value)  # type: ignore[arg-type]
 
 
 def main() -> None:
@@ -79,6 +104,22 @@ def main() -> None:
             from dataclasses import asdict
 
             print(json.dumps(asdict(summary), indent=2))
+        return
+    if args.command == "room-schedule":
+        with TimetableQueries(args.db) as queries:
+            rows = queries.get_room_schedule(
+                args.room, args.academic_year, args.semester, args.day,
+                teaching_week=args.week,
+            )
+        print(json.dumps([_json_result(row) for row in rows], indent=2))
+        return
+    if args.command == "free-rooms":
+        with TimetableQueries(args.db) as queries:
+            rows = queries.find_free_rooms(
+                args.academic_year, args.semester, args.day, args.time, args.duration,
+                teaching_week=args.week,
+            )[: args.limit]
+        print(json.dumps([_json_result(row) for row in rows], indent=2))
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:
