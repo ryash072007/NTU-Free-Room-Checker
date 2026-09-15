@@ -2,6 +2,8 @@
 
 The location browser adds a classification layer over canonical timetable room identifiers. It does not rename, trim, or otherwise normalize those identifiers. Unknown codes stay unmapped.
 
+"Anywhere on campus" is a browsing scope, not a catalog location. It uses the global physical-room availability query and intentionally includes unmapped rooms without classifying them.
+
 ## Evidence and supported locations
 
 NTU's official [Facility Location and Capacity list](https://wis.ntu.edu.sg/pls/webexe88/FBSDOCU.FBSLOCATN) is the primary source. It groups facilities by spine/building and supplies their physical addresses.

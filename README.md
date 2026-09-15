@@ -172,10 +172,12 @@ Intervals of 10 minutes or less between room bookings/classes are treated as roo
 ## Web Frontend
 
 A responsive React/TypeScript/Vite web application is available under `web/`. It connects to the FastAPI backend and provides:
-- Confident free-room search with Singapore-time "Now" shortcut and duration presets
+- A unified Browse Rooms homepage for campus-wide or researched-location availability, with Singapore-time "Now" and duration controls
 - Safe separation of uncertain and non-applicable rooms
 - Debounced, keyboard-accessible room search handling rooms with `+`
 - Room timetable views with date navigation, calendar policy explanations, and authoritative free gaps
+
+The two top-level flows are **Browse Rooms** (`/`, with `/locations` retained as an alias) and **Room Schedule** (`/schedule`). "Anywhere on campus" reuses the global free-room API and includes unmapped physical rooms without assigning invented locations. Named location browsing uses the conservative catalog documented in [room-locations.md](docs/room-locations.md).
 
 ### Local Development
 
