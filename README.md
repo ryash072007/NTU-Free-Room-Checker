@@ -127,7 +127,20 @@ python -m ntu_room_checker room-schedule "LHN-TR+15" --academic-year 2026 --seme
 python -m ntu_room_checker free-rooms --academic-year 2026 --semester 1 --day MON --time 1430 --duration 120 --week 3
 ```
 
-No HTTP API or frontend is included yet.
+No frontend is included yet.
+
+## HTTP API
+
+The versioned FastAPI backend is available without a frontend:
+
+```powershell
+$env:NTU_ROOM_CHECKER_DB = "data/ntu_schedule.db"
+python -m ntu_room_checker serve --host 127.0.0.1 --port 8000
+```
+
+Application endpoints use `/api/v1`; Swagger UI is served at `/docs`. See
+[http-api.md](docs/http-api.md) for configuration, endpoint contracts, timezone
+semantics, CORS, and uncertainty handling.
 
 ## Academic calendar dates
 
