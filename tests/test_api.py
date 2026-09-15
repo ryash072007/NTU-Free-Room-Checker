@@ -24,6 +24,11 @@ def api_db(tmp_path: Path) -> Path:
         ScheduleEntry("AB1004", "UNION", "3.0 AU", "", "10004", "TUT", "G4", "FRI", "1000-1200", "TR+15", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1005", "UNPARSED", "3.0 AU", "", "10005", "TUT", "G5", "", "unknown", "TR+17", "Teaching Wk1-13", {}),
         ScheduleEntry("AB1006", "CONTAINS", "3.0 AU", "", "10006", "TUT", "G6", "TUE", "1200-1300", "NIE-LHN-B1-01", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1007", "LHN ID", "3.0 AU", "", "10007", "TUT", "G7", "TUE", "1900-2000", "LHN-TR+17", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1010", "CHAIN 1", "3.0 AU", "", "10010", "TUT", "G1", "TUE", "1030-1220", "LHN-TR+18", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1011", "CHAIN 2", "3.0 AU", "", "10011", "TUT", "G1", "TUE", "1230-1420", "LHN-TR+18", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1012", "CHAIN 3", "3.0 AU", "", "10012", "TUT", "G1", "TUE", "1430-1620", "LHN-TR+18", "Teaching Wk1-13", {}),
+        ScheduleEntry("AB1013", "CHAIN 4", "3.0 AU", "", "10013", "TUT", "G1", "TUE", "1630-1820", "LHN-TR+18", "Teaching Wk1-13", {}),
     ]
     with ScheduleStorage(path) as storage:
         run_id = storage.start_run("https://example.test", term, resume=False)
@@ -186,6 +191,16 @@ def test_free_rooms_limit_and_default_omits_uncertain(client: TestClient) -> Non
     assert payload["uncertain_rooms"] == []
 
 
+def test_free_rooms_supports_campus_wide_result_limit(client: TestClient) -> None:
+    response = client.get("/api/v1/rooms/free", params={
+        "date": "2026-09-15", "time": "14:30", "duration": 1,
+        "include_uncertain": True, "limit": 1000,
+    })
+    assert response.status_code == 200
+    rooms = response.json()["rooms"]
+    assert any(item["room"] == "NIE-LHN-B1-01" for item in rooms)
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -193,7 +208,7 @@ def test_free_rooms_limit_and_default_omits_uncertain(client: TestClient) -> Non
         "/api/v1/rooms/free?date=2026-09-15&time=1430&duration=60",
         "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=0",
         "/api/v1/rooms/free?date=2026-09-15&time=23:30&duration=60",
-        "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=60&limit=101",
+        "/api/v1/rooms/free?date=2026-09-15&time=14:30&duration=60&limit=1001",
     ],
 )
 def test_invalid_inputs_use_structured_422(path: str, client: TestClient) -> None:
@@ -212,6 +227,8 @@ def test_openapi_documents_versioned_routes_and_nullable_is_free(client: TestCli
     schema = client.get("/openapi.json").json()
     assert "/api/v1/rooms/free" in schema["paths"]
     assert "/api/v1/rooms/{room}/availability" in schema["paths"]
+    assert "/api/v1/locations" in schema["paths"]
+    assert "/api/v1/locations/{location_id}/rooms" in schema["paths"]
     assert "RoomAvailabilityResponse" in schema["components"]["schemas"]
 
 
@@ -245,3 +262,51 @@ def test_cors_is_allowlisted_without_credentials(client: TestClient) -> None:
 
 def test_application_endpoints_are_not_exposed_unversioned(client: TestClient) -> None:
     assert client.get("/health").status_code == 404
+
+
+def test_location_list_contains_only_locations_with_known_rooms(client: TestClient) -> None:
+    payload = client.get("/api/v1/locations").json()
+    by_id = {item["id"]: item for item in payload["locations"]}
+    assert by_id["the-arc"]["name"] == "The Arc"
+    assert by_id["the-arc"]["official_name"] == "Learning Hub North"
+    assert by_id["the-arc"]["room_count"] == 4
+    assert by_id["north-spine"]["room_count"] == 2
+
+
+def test_location_room_status_is_batched_sorted_and_preserves_names(client: TestClient) -> None:
+    payload = client.get("/api/v1/locations/the-arc/rooms", params={
+        "date": "2026-09-15", "time": "16:00",
+    }).json()
+    assert payload["status"] == "ok"
+    assert [room["status"] for room in payload["rooms"]] == ["free", "free", "free", "occupied"]
+    by_room = {room["room"]: room for room in payload["rooms"]}
+    assert by_room["LHN-TR+17"]["room"] == "LHN-TR+17"
+    assert by_room["LHN-TR+15"]["free_until"] == "17:00"
+    assert by_room["LHN-TR+15"]["free_duration_minutes"] == 60
+    assert by_room["LHN-TR+18"]["available_from"] == "18:20"
+
+
+def test_location_duration_can_make_short_free_interval_occupied(client: TestClient) -> None:
+    payload = client.get("/api/v1/locations/the-arc/rooms", params={
+        "date": "2026-09-15", "time": "16:30", "duration": 60,
+    }).json()
+    by_room = {room["room"]: room for room in payload["rooms"]}
+    assert by_room["LHN-TR+15"]["status"] == "occupied"
+    assert by_room["LHN-TR+15"]["available_from"] == "18:00"
+
+
+def test_location_uncertain_non_teaching_and_unknown(client: TestClient) -> None:
+    uncertain = client.get("/api/v1/locations/north-spine/rooms", params={
+        "date": "2026-09-15", "time": "14:00",
+    }).json()
+    assert {room["room"] for room in uncertain["rooms"] if room["status"] == "uncertain"} == {"TR+17"}
+    recess = client.get("/api/v1/locations/the-arc/rooms", params={
+        "date": "2026-09-28", "time": "14:00",
+    }).json()
+    assert recess["status"] == "regular_timetable_not_applicable"
+    assert recess["rooms"] == []
+    missing = client.get("/api/v1/locations/nope/rooms", params={
+        "date": "2026-09-15", "time": "14:00",
+    })
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "unknown_location"

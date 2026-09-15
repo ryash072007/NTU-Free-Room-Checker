@@ -136,6 +136,20 @@ class TimetableQueries:
             )
         ]
 
+    def latest_physical_rooms(self) -> list[str]:
+        row = self.connection.execute(
+            "SELECT max(id) FROM normalization_runs WHERE status='completed'"
+        ).fetchone()
+        if row is None or row[0] is None:
+            raise ValueError("No normalized timetable data is available")
+        return [
+            str(item[0]) for item in self.connection.execute(
+                """SELECT venue_display FROM rooms
+                   WHERE normalization_run_id=? AND venue_type='physical_room'
+                   ORDER BY venue_display""", (int(row[0]),)
+            )
+        ]
+
     def search_rooms(self, query: str, limit: int) -> list[RoomSummary]:
         """Search distinct normalized physical rooms across completed runs."""
         normalized_query = query.strip()

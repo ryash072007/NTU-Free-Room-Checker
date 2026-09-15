@@ -61,18 +61,20 @@ This forwards any client request starting with `/api` directly to the local back
 
 The application features two primary user flows:
 
-### 1. Find a Free Room (`/`)
-- **Route**: `/` (`FreeRoomsPage`)
-- **UX flow**: Submit-driven query to find available rooms across campus.
+### 1. Browse Rooms (`/` and `/locations`)
+- **Routes**: `/` is canonical; `/locations` is a compatible alias.
+- **UX flow**: Reactive browsing across campus or within a researched location.
 - **Controls**:
-  - **"Now" button**: Automatically populates the current date and rounds the start time up to the next 5-minute Singapore-time boundary.
+  - **Location**: Defaults to "Anywhere on campus" and also offers The Arc, North Spine, The Hive, and South Spine.
+  - **"Now" button**: Populates the current date and rounds time up to the next 5-minute Singapore-time boundary.
   - **Custom date/time picker**: Allows querying arbitrary dates and times.
-  - **Duration presets**: Quick selection of 30 min, 1h (default), 2h, or 3h, plus custom minute input.
-  - **Sorting**: Sort confident results by longest availability or alphabetically by room name.
+  - **Duration**: Any, 30m, 1h, 2h, or 3h. Campus-wide mode applies it through the global free-room service; named locations hide free rooms that cannot satisfy it.
+  - **Sorting/filtering**: Best availability or room name, plus a room-name filter.
 - **Result presentation**:
-  - Displays each confident room with free-until time and total duration available.
+  - Campus-wide mode prioritizes confidently free rooms and keeps uncertain rooms separate. It includes physical rooms outside the named-location catalog.
+  - Named locations show Free, In use, and Uncertain groups, including `available_from` for occupied rooms.
+  - Displays free-until time and total duration available.
   - Links directly to each room's detailed schedule page with URL-encoded parameters.
-  - Keeps uncertain rooms strictly segregated in an expandable accordion with explicit reason descriptions.
 
 ### 2. Check Room Schedule (`/schedule` and `/rooms/:room`)
 - **Routes**:
@@ -122,11 +124,12 @@ The test suite covers:
 - `client.test.ts`: Plus-sign URL encoding, structured API error envelope handling.
 - `time.test.ts`: Singapore time calculation, boundary rounding, duration formatting, date shifts.
 - `RoomSearch.test.tsx`: Search debouncing, keyboard navigation, safe plus-sign handling.
-- `FreeRoomsPage.test.tsx`: Default state, Singapore "Now" rounding, duration submission, confident vs uncertain segregation, recess week handling, error states.
+- `LocationsPage.test.tsx`: Campus-wide and named-location browsing, Singapore "Now", duration and sorting, canonical identifiers, uncertainty, responsive list semantics, and non-teaching states.
+- `App.test.tsx`: Homepage and `/locations` alias routing plus the two-item primary navigation.
 - `RoomPage.test.tsx`: Encoded room loading, live availability, safe free-gap derivation, exception-adjusted timings, exam period warnings, date navigation, 404 unknown room handling.
 
 ### Backend Test Suite
-The FastAPI and domain logic backend test suite (219 tests) can be run from the repository root:
+The FastAPI and domain logic backend test suite can be run from the repository root:
 
 ```powershell
 python -m pytest

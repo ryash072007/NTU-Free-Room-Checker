@@ -6,12 +6,14 @@ from ntu_room_checker.api.schemas.availability import (
 from ntu_room_checker.api.schemas.calendar import CalendarExceptionResponse, CalendarResponse
 from ntu_room_checker.api.schemas.common import TimeIntervalResponse
 from ntu_room_checker.api.schemas.rooms import MeetingResponse, RoomScheduleResponse
+from ntu_room_checker.api.schemas.locations import LocationResponse, LocationRoomResponse, LocationRoomsResponse
 from ntu_room_checker.api.time import minute_to_clock
 from ntu_room_checker.calendar.models import DateResolution
 from ntu_room_checker.calendar.policy import ApplicabilityStatus
 from ntu_room_checker.normalization.venue import normalize_venue
 from ntu_room_checker.queries.calendar_service import (
     DateFreeRoomsResult, DateScheduleResult, RoomAvailabilityResult,
+    LocationRoomsResult,
 )
 from ntu_room_checker.queries.service import overlaps
 
@@ -139,4 +141,33 @@ def free_rooms_response(result: DateFreeRoomsResult, limit: int) -> FreeRoomsRes
             )
             for item in result.uncertain_rooms[:limit]
         ],
+    )
+
+
+def location_rooms_response(result: LocationRoomsResult, duration: int) -> LocationRoomsResponse:
+    location = result.location
+    return LocationRoomsResponse(
+        location=LocationResponse(
+            id=location.id, name=location.name, official_name=location.official_name,
+            short_name=location.short_name, aliases=list(location.aliases),
+            room_count=len(result.rooms),
+        ),
+        date=result.calendar.date,
+        requested_time=minute_to_clock(result.requested_minute),  # type: ignore[arg-type]
+        duration_minutes=duration,
+        status=result.status,
+        reason=result.reason,
+        calendar=calendar_response(result.calendar),
+        rooms=[LocationRoomResponse(
+            room=item.room,
+            status=item.status,
+            is_free=item.is_free,
+            free_until=minute_to_clock(item.free_until),
+            free_duration_minutes=(
+                item.free_until - result.requested_minute if item.free_until is not None else None
+            ),
+            available_from=minute_to_clock(item.available_from),
+            reason_codes=list(item.reason_codes),
+            reasons=list(item.reasons),
+        ) for item in result.rooms],
     )

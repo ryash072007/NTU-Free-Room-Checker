@@ -9,6 +9,8 @@ from ntu_room_checker.calendar import CalendarPolicyEngine, CalendarResolver, de
 from ntu_room_checker.calendar.models import DateResolution
 from ntu_room_checker.calendar.policy import ApplicabilityStatus, DatePolicyResult, TimetableAuthority
 from ntu_room_checker.normalization.venue import normalize_venue
+from ntu_room_checker.locations import get_location, rooms_by_location
+from ntu_room_checker.locations.models import Location
 from ntu_room_checker.queries.models import (
     ROOM_TRANSITION_MINUTES,
     EvaluatedMeeting,
@@ -66,6 +68,26 @@ class RoomAvailabilityResult:
     uncertainty_reasons: tuple[str, ...] = ()
     evaluated_meetings: tuple[EvaluatedMeeting, ...] = ()
     uncertain_intervals: tuple[tuple[int, int], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LocationRoomStatus:
+    room: str
+    status: str
+    is_free: bool | None
+    free_until: int | None
+    available_from: int | None
+    reason_codes: tuple[str, ...] = ()
+    reasons: tuple[str, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class LocationRoomsResult:
+    location: Location
+    calendar: DateResolution
+    status: str
+    reason: str
+    requested_minute: int
+    rooms: tuple[LocationRoomStatus, ...]
 
 
 def coalesce_evaluated_blocks(
@@ -285,6 +307,78 @@ class CalendarTimetableService:
                 ))
         return DateFreeRoomsResult(
             resolution, "ok", "", start, end, tuple(free), tuple(uncertain_rooms)
+        )
+
+    def get_location_rooms_for_datetime(
+        self, location_id: str, value: datetime | str, duration_minutes: int = 1
+    ) -> LocationRoomsResult:
+        location = get_location(location_id)
+        if location is None:
+            raise KeyError(location_id)
+        _, resolution, start, end = self._request_context(value, duration_minutes)
+        date_policy = self.policy.evaluate_date(resolution)
+        if date_policy.authority != TimetableAuthority.AUTHORITATIVE:
+            return LocationRoomsResult(
+                location, resolution, self._status_for_date_policy(date_policy),
+                date_policy.reason, start, (),
+            )
+        try:
+            all_rooms = self.queries.physical_rooms(
+                resolution.academic_year, resolution.semester
+            )
+            location_rooms = rooms_by_location(all_rooms).get(location_id, [])
+            unparsed = self.queries.rooms_with_unparsed_meetings(
+                resolution.academic_year, resolution.semester,
+                teaching_week=resolution.teaching_week,
+            )
+            schedules = self.queries.get_room_schedules(
+                resolution.academic_year, resolution.semester,
+                resolution.day_of_week, teaching_week=resolution.teaching_week,
+            )
+        except ValueError as error:
+            return LocationRoomsResult(
+                location, resolution, AvailabilityStatus.NORMALIZED_TIMETABLE_UNAVAILABLE,
+                str(error), start, (),
+            )
+
+        results: list[LocationRoomStatus] = []
+        for room in location_rooms:
+            if room in unparsed:
+                results.append(LocationRoomStatus(
+                    room, AvailabilityStatus.UNCERTAIN, None, None, None,
+                    ("unparsed_timetable_meeting",),
+                    ("The room has a meeting with an unparsed day or time.",),
+                ))
+                continue
+            availability = self._evaluate_room(
+                room, resolution, start, end, meetings=schedules.get(room, ())
+            )
+            available_from = None
+            if availability.status == AvailabilityStatus.OCCUPIED:
+                available_from = max(item.end_minute for item in availability.occupied_intervals)
+            results.append(LocationRoomStatus(
+                room=room,
+                status=availability.status,
+                is_free=availability.is_free,
+                free_until=availability.free_until,
+                available_from=available_from,
+                reason_codes=availability.uncertainty_reason_codes,
+                reasons=availability.uncertainty_reasons or (
+                    (availability.reason,) if availability.status == AvailabilityStatus.UNCERTAIN else ()
+                ),
+            ))
+
+        def sort_key(item: LocationRoomStatus) -> tuple[object, ...]:
+            if item.status == AvailabilityStatus.FREE:
+                duration = 24 * 60 + 1 if item.free_until is None else item.free_until - start
+                return (0, -duration, item.room)
+            if item.status == AvailabilityStatus.OCCUPIED:
+                return (1, item.available_from or 24 * 60 + 1, item.room)
+            return (2, item.room)
+
+        return LocationRoomsResult(
+            location, resolution, "ok", "", start,
+            tuple(sorted(results, key=sort_key)),
         )
 
     def get_room_availability_for_datetime(

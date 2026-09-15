@@ -144,6 +144,20 @@ legend { margin-bottom: 8px; color: #4f484a; font-size: .8rem; font-weight: 750;
 .meeting-body dl div { display: grid; grid-template-columns: 55px 1fr; gap: 8px; }
 .meeting-body dt { font-weight: 750; }.meeting-body dd { margin: 0; }
 
+.location-controls { display: grid; grid-template-columns: 2fr 1.2fr 1fr auto 1fr; align-items: end; gap: 9px; padding: 17px; border: 1px solid #ddd8d2; background: white; }
+.location-controls .primary-button { width: auto; }
+.location-title { display: flex; justify-content: space-between; align-items: end; gap: 15px; margin-top: 30px; padding-bottom: 12px; border-bottom: 1px solid #d8d2cd; }
+.location-title p { margin: 3px 0; color: #6b6465; font-size: .84rem; }
+.room-status-group h3 { margin: 22px 0 7px; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }
+.room-status-group h3 span { color: #756d6f; }
+.room-status-group ul { margin: 0; padding: 0; border: 1px solid #ddd8d2; background: white; list-style: none; }
+.room-status-group li + li { border-top: 1px solid #e6e1dc; }
+.room-status-group a { display: grid; grid-template-columns: minmax(130px,.7fr) 90px minmax(180px,1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 10px 14px; text-decoration: none; }
+.room-status-group a:hover { background: #faf8f6; }
+.room-status-group small { color: #61595b; }
+.status-label.occupied { color: #8f1730; }.status-label.uncertain { color: #745600; }
+.room-filter { display: block; max-width: 360px; margin: 16px 0 0; }
+
 @media (max-width: 580px) {
   .site-header { align-items: stretch; flex-direction: column; gap: 7px; padding: 10px 16px 8px; }
   nav { display: grid; grid-template-columns: 1fr 1fr; }
@@ -163,4 +177,10 @@ legend { margin-bottom: 8px; color: #4f484a; font-size: .8rem; font-weight: 750;
   .date-navigation label { max-width: none; }
   .timeline-row { grid-template-columns: 48px 16px minmax(0,1fr); }
   .meeting-body { padding: 11px 12px; }
+  .location-controls { grid-template-columns: 1fr 1fr; padding: 13px; }
+  .location-controls label:first-child { grid-column: 1 / -1; }
+  .location-controls .primary-button { width: 100%; }
+  .location-title { align-items: stretch; flex-direction: column; }
+  .room-status-group a { grid-template-columns: 1fr auto; gap: 4px 8px; min-height: 64px; }
+  .room-status-group small { grid-column: 1 / -1; }
 }

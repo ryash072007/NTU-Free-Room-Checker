@@ -144,3 +144,10 @@ per room. No cache is currently required.
 The API is read-oriented, but the underlying normalization and scraper commands
 remain separate CLI workflows. Production deployments should point the API at a
 completed database and configure an explicit frontend-origin allowlist.
+## Location browser
+
+`GET /api/v1/locations` lists only catalog locations that contain physical rooms in the latest normalized run. `GET /api/v1/locations/{location_id}/rooms?date=YYYY-MM-DD&time=HH:MM&duration=1` returns the location's rooms in best-availability order. `duration` is optional and defaults to one minute.
+
+The batch endpoint loads the room inventory, unparsed-meeting set, and all applicable schedules for the date in bulk; it does not issue a query per room. Free entries include `free_until` and `free_duration_minutes`. Occupied entries include `available_from`, calculated from the end of the coalesced occupied block, including chains separated by at most ten minutes. Calendar-policy uncertainty and non-authoritative dates retain the same status values as the existing endpoints.
+
+Location mapping rationale and sources are in [room-locations.md](room-locations.md).

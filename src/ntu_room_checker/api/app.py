@@ -9,7 +9,7 @@ from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from ntu_room_checker.api.config import ApiSettings
-from ntu_room_checker.api.routes import calendar, health, rooms
+from ntu_room_checker.api.routes import calendar, health, locations, rooms
 
 API_PREFIX = "/api/v1"
 
@@ -77,6 +77,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     application.include_router(health.router, prefix=API_PREFIX)
     application.include_router(calendar.router, prefix=API_PREFIX)
     application.include_router(rooms.router, prefix=API_PREFIX)
+    application.include_router(locations.router, prefix=API_PREFIX)
 
     static_dir = configured.static_dir
     if static_dir and (static_dir / "index.html").is_file():
