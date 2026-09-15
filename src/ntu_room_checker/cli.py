@@ -10,6 +10,9 @@ from ntu_room_checker.normalization.profiling import profile_database, top_value
 from ntu_room_checker.normalization.runner import normalize_database
 from ntu_room_checker.normalization.statistics import normalization_statistics
 from ntu_room_checker.queries import TimetableQueries
+from ntu_room_checker.calendar import default_resolver
+from ntu_room_checker.queries import CalendarTimetableService
+from ntu_room_checker.normalization.time_parser import parse_clock
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
 
@@ -45,14 +48,16 @@ def build_parser() -> argparse.ArgumentParser:
     normalize.add_argument("--source-run", type=_positive_int)
     normalize.add_argument("--rebuild", action="store_true")
     normalize.add_argument("--stats", action="store_true", help="Print resulting counts")
+    calendar_date = commands.add_parser("calendar-date", help="Resolve an ISO date")
+    calendar_date.add_argument("date")
     room = commands.add_parser("room-schedule", help="Print a normalized room schedule")
     room.add_argument("room")
     _add_query_term_arguments(room)
-    room.add_argument("--day", required=True)
+    room.add_argument("--day")
     room.add_argument("--week", type=_positive_int)
     free = commands.add_parser("free-rooms", help="Find physical rooms free for an interval")
     _add_query_term_arguments(free)
-    free.add_argument("--day", required=True)
+    free.add_argument("--day")
     free.add_argument("--time", required=True, help="HHMM or HH:MM")
     free.add_argument("--duration", required=True, type=_positive_int)
     free.add_argument("--week", type=_positive_int)
@@ -62,8 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_query_term_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
-    parser.add_argument("--academic-year", required=True)
-    parser.add_argument("--semester", required=True)
+    parser.add_argument("--date", help="ISO calendar date; replaces AY/semester/day/week")
+    parser.add_argument("--academic-year")
+    parser.add_argument("--semester")
 
 
 def _positive_int(value: str) -> int:
@@ -84,6 +90,17 @@ def _json_result(value: object) -> dict[str, object]:
     from dataclasses import asdict
 
     return asdict(value)  # type: ignore[arg-type]
+
+
+def _print_json(value: object) -> None:
+    print(json.dumps(value, indent=2, default=str))
+
+
+def _require_legacy_query_args(args: argparse.Namespace) -> None:
+    missing = [name for name in ("academic_year", "semester", "day") if not getattr(args, name)]
+    if missing:
+        flags = ", ".join("--" + name.replace("_", "-") for name in missing)
+        raise SystemExit(f"Without --date, the following arguments are required: {flags}")
 
 
 def main() -> None:
@@ -108,7 +125,16 @@ def main() -> None:
             payload.update(normalization_statistics(args.db, summary.normalization_run_id))
             print(json.dumps(payload, indent=2))
         return
+    if args.command == "calendar-date":
+        _print_json(_json_result(default_resolver().resolve(args.date)))
+        return
     if args.command == "room-schedule":
+        if args.date:
+            with CalendarTimetableService(args.db) as service:
+                result = service.get_room_schedule_for_date(args.room, args.date)
+            _print_json(_json_result(result))
+            return
+        _require_legacy_query_args(args)
         with TimetableQueries(args.db) as queries:
             rows = queries.get_room_schedule(
                 args.room, args.academic_year, args.semester, args.day,
@@ -117,6 +143,16 @@ def main() -> None:
         print(json.dumps([_json_result(row) for row in rows], indent=2))
         return
     if args.command == "free-rooms":
+        if args.date:
+            minute = parse_clock(args.time)
+            instant = f"{args.date}T{minute // 60:02d}:{minute % 60:02d}"
+            with CalendarTimetableService(args.db) as service:
+                result = service.find_free_rooms_for_datetime(instant, args.duration)
+            payload = _json_result(result)
+            payload["rooms"] = list(payload["rooms"])[: args.limit]  # type: ignore[arg-type]
+            _print_json(payload)
+            return
+        _require_legacy_query_args(args)
         with TimetableQueries(args.db) as queries:
             rows = queries.find_free_rooms(
                 args.academic_year, args.semester, args.day, args.time, args.duration,
