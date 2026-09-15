@@ -100,18 +100,19 @@ class TimetableQueries:
     def search_rooms(self, query: str, limit: int) -> list[RoomSummary]:
         """Search distinct normalized physical rooms across completed runs."""
         normalized_query = query.strip()
-        contains = f"%{normalized_query}%"
-        prefix = f"{normalized_query}%"
+        escaped = normalized_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        contains = f"%{escaped}%"
+        prefix = f"{escaped}%"
         rows = self.connection.execute(
             """SELECT r.venue_normalized,MIN(r.venue_display) AS venue_display,
                       CASE
                         WHEN r.venue_normalized = ? COLLATE NOCASE THEN 0
-                        WHEN r.venue_normalized LIKE ? COLLATE NOCASE THEN 1
+                        WHEN r.venue_normalized LIKE ? ESCAPE '\\' COLLATE NOCASE THEN 1
                         ELSE 2
                       END AS rank
                FROM rooms r JOIN normalization_runs nr ON nr.id=r.normalization_run_id
                WHERE nr.status='completed' AND r.venue_type='physical_room'
-                 AND r.venue_normalized LIKE ? COLLATE NOCASE
+                 AND r.venue_normalized LIKE ? ESCAPE '\\' COLLATE NOCASE
                GROUP BY r.venue_normalized
                ORDER BY rank,LENGTH(r.venue_normalized),r.venue_normalized
                LIMIT ?""",

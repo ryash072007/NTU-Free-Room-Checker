@@ -5,11 +5,19 @@ from fastapi import APIRouter, HTTPException, Path, Query
 
 from ntu_room_checker.api.dependencies import CalendarServiceDependency, QueriesDependency
 from ntu_room_checker.api.schemas.availability import FreeRoomsResponse, RoomAvailabilityResponse
+from ntu_room_checker.api.schemas.common import ErrorResponse
 from ntu_room_checker.api.schemas.rooms import RoomItemResponse, RoomListResponse, RoomScheduleResponse
 from ntu_room_checker.api.serialization import availability_response, free_rooms_response, schedule_response
 from ntu_room_checker.api.validation import local_datetime, parse_api_clock
 
-router = APIRouter(prefix="/rooms", tags=["rooms"])
+router = APIRouter(
+    prefix="/rooms", tags=["rooms"],
+    responses={
+        404: {"model": ErrorResponse, "description": "Room or route not found"},
+        422: {"model": ErrorResponse, "description": "Invalid request parameters"},
+        503: {"model": ErrorResponse, "description": "Timetable database unavailable"},
+    },
+)
 RoomPath = Annotated[str, Path(min_length=1, max_length=100)]
 
 

@@ -50,7 +50,8 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     @application.exception_handler(StarletteHTTPException)
     async def http_error(_: Request, error: StarletteHTTPException) -> JSONResponse:
         detail = error.detail if isinstance(error.detail, dict) else {
-            "code": "http_error", "message": str(error.detail)
+            "code": "not_found" if error.status_code == 404 else "http_error",
+            "message": str(error.detail),
         }
         return JSONResponse(
             status_code=error.status_code,

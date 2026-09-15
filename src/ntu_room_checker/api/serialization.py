@@ -9,6 +9,7 @@ from ntu_room_checker.api.schemas.rooms import MeetingResponse, RoomScheduleResp
 from ntu_room_checker.api.time import minute_to_clock
 from ntu_room_checker.calendar.models import DateResolution
 from ntu_room_checker.calendar.policy import ApplicabilityStatus
+from ntu_room_checker.normalization.venue import normalize_venue
 from ntu_room_checker.queries.calendar_service import (
     DateFreeRoomsResult, DateScheduleResult, RoomAvailabilityResult,
 )
@@ -73,7 +74,7 @@ def schedule_response(room: str, result: DateScheduleResult) -> RoomScheduleResp
             reasons=[] if decision.reason_code == "regular_timetable_meeting" else [decision.reason],
         ))
     return RoomScheduleResponse(
-        room=room,
+        room=normalize_venue(room).normalized,
         date=result.calendar.date,
         calendar=calendar_response(result.calendar),
         status=result.status,
@@ -136,4 +137,3 @@ def free_rooms_response(result: DateFreeRoomsResult, limit: int) -> FreeRoomsRes
             for item in result.uncertain_rooms[:limit]
         ],
     )
-
