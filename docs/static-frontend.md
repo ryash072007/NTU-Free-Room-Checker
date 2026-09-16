@@ -49,8 +49,8 @@ smaller than the roughly 302 MB source database and avoids exposing irrelevant d
 
 ## Development and verification
 
-The FastAPI application remains available as a reference/debugging backend, but the
-production frontend never calls `/api/v1`. Run the normal checks with:
+The Python domain layer is the build-time correctness oracle; no HTTP server is
+retained on `main`. Run the normal checks with:
 
 ```powershell
 python -m pytest
@@ -77,5 +77,7 @@ Directory to `dist`. `web/vercel.json` contains the SPA fallback. No Turso, SQLi
 4. Review counts, size statistics, tests, and the built site.
 5. Commit the generated data and source changes, then push for Vercel auto-deployment.
 
-The validated `feature/turso-runtime` branch is retained unchanged as an alternative
-architecture if a runtime backend is needed later. It is not part of this deployment.
+Historical runtime alternatives remain outside `main`: `archive/backend-runtime`
+preserves the former SQLite/FastAPI/Docker application, and the validated
+`feature/turso-runtime` branch preserves the Turso variant. Neither is part of this
+deployment.
