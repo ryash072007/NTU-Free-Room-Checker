@@ -182,6 +182,8 @@ cython_debug/
 
 # NTU scraper runtime artifacts
 data/
+!web/public/data/
+!web/public/data/**
 debug/
 *.db
 *.db-shm
