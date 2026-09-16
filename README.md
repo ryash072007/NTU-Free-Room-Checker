@@ -1,5 +1,9 @@
 # NTU Free Room Checker
 
+> Production architecture: a frontend-only React/Vite static site. Python + SQLite
+> are build-time data tooling and a correctness oracle; they are not production
+> runtime dependencies. See [docs/static-frontend.md](docs/static-frontend.md).
+
 Who wants to do trial and error when trying to find a free TR? This project will
 eventually turn NTU timetable data into room availability. The current phase is
 a reusable raw-data scraper for NTU's public class schedule.
