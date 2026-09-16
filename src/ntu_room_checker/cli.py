@@ -85,6 +85,9 @@ def build_parser() -> argparse.ArgumentParser:
     availability.add_argument(
         "--explain", action="store_true", help="Include per-meeting policy decisions"
     )
+    export = commands.add_parser("export-web-data", help="Compile static frontend timetable data")
+    export.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    export.add_argument("--output", type=Path, default=Path("web/public/data"))
     return parser
 
 
@@ -213,6 +216,11 @@ def main() -> None:
         if not args.explain:
             payload.pop("evaluated_meetings", None)
         _print_json(payload)
+        return
+    if args.command == "export-web-data":
+        from ntu_room_checker.web_export import export_web_data
+
+        _print_json(export_web_data(args.db, args.output))
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:

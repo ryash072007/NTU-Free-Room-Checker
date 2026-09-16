@@ -60,7 +60,7 @@ describe("Browse Rooms", () => {
     expect(await screen.findByText("Available at 18:20")).toBeInTheDocument();
     expect(screen.getByText("Free for 2h 5m · until 17:50")).toBeInTheDocument();
     expect(screen.getByText("Cannot confirm this meeting.")).toBeInTheDocument();
-    expect(mockedLocationRooms).toHaveBeenCalledWith("the-arc", { date: "2026-09-15", time: "15:43" }, expect.any(AbortSignal));
+    expect(mockedLocationRooms).toHaveBeenCalledWith("the-arc", { date: "2026-09-15", time: "15:43", duration: 1 }, expect.any(AbortSignal));
   });
 
   it("uses Singapore Now and duration filters campus-wide at the source", async () => {
