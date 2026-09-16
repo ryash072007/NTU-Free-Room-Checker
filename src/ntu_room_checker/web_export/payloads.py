@@ -33,7 +33,7 @@ def calendar_payload(value: DateResolution) -> dict[str, Any]:
         "holiday": value.holiday_name,
         "holiday_observed": value.holiday_observed,
         "exceptions": [
-            {
+            _without_none({
                 "id": item.exception_id,
                 "effect": item.effect.value,
                 "date": item.date.isoformat(),
@@ -43,7 +43,7 @@ def calendar_payload(value: DateResolution) -> dict[str, Any]:
                 "affected_population": item.affected_population.value,
                 "description": item.description,
                 "source_note": item.source_note,
-            }
+            })
             for item in value.exceptions
         ],
     })
