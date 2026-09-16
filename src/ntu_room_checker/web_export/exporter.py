@@ -7,16 +7,15 @@ import json
 import shutil
 import sqlite3
 import tempfile
-from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from ntu_room_checker.api.serialization import calendar_response, schedule_response
 from ntu_room_checker.calendar.policy import TimetableAuthority
 from ntu_room_checker.locations import LOCATIONS, classify_room, rooms_by_location
 from ntu_room_checker.queries import CalendarTimetableService
 from ntu_room_checker.queries.calendar_service import DateScheduleResult
+from ntu_room_checker.web_export.payloads import calendar_payload, schedule_payload
 
 SCHEMA_VERSION = 1
 
@@ -56,14 +55,6 @@ def _fingerprint(db: Path, run: dict[str, Any]) -> str:
     with db.open("rb") as handle:
         digest.update(handle.read(1024 * 1024))
     return digest.hexdigest()
-
-
-def _meeting_payload(item: Any) -> dict[str, Any]:
-    return item.model_dump(mode="json", exclude_none=True)
-
-
-def _calendar_payload(resolution: Any) -> dict[str, Any]:
-    return calendar_response(resolution).model_dump(mode="json", exclude_none=True)
 
 
 def _date_range(year: int, semester: str) -> tuple[date, date]:
@@ -154,7 +145,7 @@ def export_web_data(db: Path, output: Path) -> dict[str, Any]:
                         has_adjustments = any(item.applicability.applied_exceptions for item in evaluated)
                         schedule_status = "uncertain" if has_uncertain else "ok_with_adjustments" if has_adjustments else "ok"
                         schedule_reason = "One or more meetings have uncertain calendar-exception applicability." if has_uncertain else "One or more effective meeting intervals were adjusted by calendar policy." if has_adjustments else ""
-                        schedule = schedule_response(room, DateScheduleResult(
+                        schedule = schedule_payload(room, DateScheduleResult(
                             resolution, schedule_status, schedule_reason, tuple(meetings), evaluated,
                         ))
                         # _evaluate_room exposes coalesced blocks only for matching requests;
@@ -178,7 +169,7 @@ def export_web_data(db: Path, output: Path) -> dict[str, Any]:
                             for s, e, items in coalesced_u]
                         day_rooms[room] = {
                             "status": schedule_status, "reason": schedule_reason,
-                            "schedule": [_meeting_payload(item) for item in schedule.meetings],
+                            "schedule": schedule["meetings"],
                             "occupied_blocks": occupied_blocks,
                             "uncertain_blocks": uncertain_blocks,
                         }
@@ -190,7 +181,7 @@ def export_web_data(db: Path, output: Path) -> dict[str, Any]:
                     "schema_version": SCHEMA_VERSION, "date": day,
                     "status": day_status, "reason": policy.reason if day_status != "ok" else "",
                     "reason_code": policy.reason_code if day_status != "ok" else "",
-                    "calendar": _calendar_payload(resolution), "rooms": day_rooms,
+                    "calendar": calendar_payload(resolution), "rooms": day_rooms,
                     "unparsed_rooms": unparsed,
                 })
                 current += timedelta(days=1)

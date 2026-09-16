@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from ntu_room_checker.queries import CalendarTimetableService
-from ntu_room_checker.api.serialization import schedule_response
+from ntu_room_checker.web_export.payloads import schedule_payload
 
 
 ROOT = Path(__file__).parents[1]
@@ -90,8 +90,8 @@ def test_room_search_and_schedule_match_python_oracle():
             assert static == oracle
         for date, room in (("2026-09-15", "LHN-TR+15"), ("2026-09-04", "LHN-TR+17"), ("2026-09-16", "TR+17")):
             day = json.loads((STATIC / "days" / f"{date}.json").read_text())
-            oracle = schedule_response(room, service.get_room_schedule_for_date(room, date))
-            assert day["rooms"].get(room, {}).get("schedule", []) == oracle.model_dump(mode="json")["meetings"]
+            oracle = schedule_payload(room, service.get_room_schedule_for_date(room, date))
+            assert day["rooms"].get(room, {}).get("schedule", []) == oracle["meetings"]
 
 
 @pytest.mark.skipif(not DB.exists(), reason="repository timetable database is not present")
