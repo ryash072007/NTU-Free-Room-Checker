@@ -91,7 +91,7 @@ export function LocationsPage() {
           ],
         });
       } else {
-        setResult(await getLocationRooms(locationId, { date, time }, controller.signal));
+        setResult(await getLocationRooms(locationId, { date, time, duration: duration || 1 }, controller.signal));
       }
     };
     load().catch((caught) => {
