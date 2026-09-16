@@ -12,7 +12,9 @@ describe("static data repository", () => {
     ), { status: 200 })));
     vi.stubGlobal("fetch", fetchMock);
     await getRoomSchedule("LHN-TR+15", "2026-09-15");
+    await getRoomSchedule("LHN-TR+15", "2026-09-15");
     expect(fetchMock.mock.calls.map((call) => call[0])).toContain("/data/days/2026-09-15.json");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/"))).toBe(false);
   });
 });
