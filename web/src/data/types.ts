@@ -9,7 +9,10 @@ export interface StaticManifest {
   supported_dates: string[];
 }
 
-export interface StaticRoom { id: string; name: string; location_id?: string; location_name?: string }
+export interface StaticRoom {
+  id: string; name: string; location_id?: string; location_name?: string;
+  class_types?: string[]; capacity?: number; bookable_by_staff?: boolean; bookable_by_student_orgs?: boolean;
+}
 export interface StaticRooms { schema_version: number; rooms: StaticRoom[] }
 export interface StaticLocation { id: string; name: string; official_name: string | null; short_name: string; aliases: string[]; room_count: number; rooms: string[] }
 export interface StaticLocations { schema_version: number; locations: StaticLocation[] }

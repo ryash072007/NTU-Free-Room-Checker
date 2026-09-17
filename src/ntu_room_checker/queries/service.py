@@ -10,9 +10,12 @@ from ntu_room_checker.queries.models import (
     ROOM_TRANSITION_MINUTES,
     FreeRoom,
     OccupiedInterval,
+    RoomFacility,
     RoomMeeting,
     RoomSummary,
 )
+
+CLASS_TYPE_MIN_SHARE = 0.20
 
 
 def overlaps(start: int, end: int, requested_start: int, requested_end: int) -> bool:
@@ -322,3 +325,60 @@ class TimetableQueries:
             )
             results.append(FreeRoom(room, start, end, next_start))
         return results
+
+    def class_types_by_room(
+        self, academic_year: str | int, semester: str | int
+    ) -> dict[str, list[str]]:
+        """Per-room class_type(s) accounting for a large majority of its meetings.
+
+        NTU's own ``class_type`` value on each meeting is the room-type signal
+        (never inferred from the room name). A room's dominant type is always
+        kept; additional types are only kept when they account for at least
+        ``CLASS_TYPE_MIN_SHARE`` of the room's canonical meetings, so a single
+        stray booking of another type does not make an otherwise single-use
+        room look mixed-use.
+        """
+        run_id = self._normalization_run(academic_year, semester)
+        rows = self.connection.execute(
+            """SELECT r.venue_display,cc.class_type,COUNT(*) AS meeting_count
+               FROM rooms r JOIN class_meetings m ON m.room_id=r.id
+               JOIN canonical_classes cc ON cc.id=m.canonical_class_id
+               WHERE r.normalization_run_id=? AND r.venue_type='physical_room'
+                 AND cc.normalization_run_id=?
+               GROUP BY r.venue_display,cc.class_type""",
+            (run_id, run_id),
+        ).fetchall()
+        counts: dict[str, dict[str, int]] = {}
+        for row in rows:
+            counts.setdefault(str(row["venue_display"]), {})[str(row["class_type"])] = int(row["meeting_count"])
+        return {room: _dominant_class_types(types) for room, types in counts.items()}
+
+    def room_facilities_by_room(
+        self, academic_year: str | int, semester: str | int
+    ) -> dict[str, RoomFacility]:
+        """Capacity/bookable metadata for rooms with a confirmed facility-list join."""
+        run_id = self._normalization_run(academic_year, semester)
+        rows = self.connection.execute(
+            """SELECT venue_display,capacity,bookable_by_staff,bookable_by_student_orgs
+               FROM rooms WHERE normalization_run_id=? AND venue_type='physical_room'
+                 AND capacity IS NOT NULL""",
+            (run_id,),
+        ).fetchall()
+        return {
+            str(row["venue_display"]): RoomFacility(
+                capacity=int(row["capacity"]),
+                bookable_by_staff=bool(row["bookable_by_staff"]),
+                bookable_by_student_orgs=bool(row["bookable_by_student_orgs"]),
+            )
+            for row in rows
+        }
+
+
+def _dominant_class_types(
+    counts: dict[str, int], *, min_share: float = CLASS_TYPE_MIN_SHARE
+) -> list[str]:
+    total = sum(counts.values())
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    kept = [ranked[0][0]]
+    kept.extend(class_type for class_type, count in ranked[1:] if count / total >= min_share)
+    return kept

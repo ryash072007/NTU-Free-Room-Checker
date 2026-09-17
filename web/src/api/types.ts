@@ -53,12 +53,20 @@ export interface FreeRoomItem {
   room: string;
   free_until: string | null;
   free_duration_minutes: number | null;
+  class_types: string[];
+  capacity: number | null;
+  bookable_by_staff: boolean | null;
+  bookable_by_student_orgs: boolean | null;
 }
 
 export interface UncertainRoomItem {
   room: string;
   reason_codes: string[];
   reasons: string[];
+  class_types: string[];
+  capacity: number | null;
+  bookable_by_staff: boolean | null;
+  bookable_by_student_orgs: boolean | null;
 }
 
 export interface FreeRoomsResponse {
@@ -99,6 +107,10 @@ export interface RoomScheduleResponse {
   status: AvailabilityStatus | "ok" | "ok_with_adjustments";
   reason: string;
   meetings: Meeting[];
+  class_types: string[];
+  capacity: number | null;
+  bookable_by_staff: boolean | null;
+  bookable_by_student_orgs: boolean | null;
 }
 
 export interface RoomAvailabilityResponse {
@@ -140,6 +152,10 @@ export interface LocationRoomItem {
   available_from: string | null;
   reason_codes: string[];
   reasons: string[];
+  class_types: string[];
+  capacity: number | null;
+  bookable_by_staff: boolean | null;
+  bookable_by_student_orgs: boolean | null;
 }
 
 export interface LocationRoomsResponse {

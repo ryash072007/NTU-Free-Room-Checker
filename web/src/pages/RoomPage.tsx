@@ -130,7 +130,16 @@ export function RoomPage() {
     <main className="page room-page">
       <Link className="back-link" to="/schedule">← Search another room</Link>
       <header className="room-header">
-        <div><div className="eyebrow">Room schedule</div><h1>{room}</h1></div>
+        <div><div className="eyebrow">Room schedule</div><h1>{room}</h1>
+          {schedule && (schedule.class_types.length > 0 || schedule.capacity !== null) && (
+            <p className="room-meta">
+              {schedule.class_types.join(" · ")}
+              {schedule.class_types.length > 0 && schedule.capacity !== null && " · "}
+              {schedule.capacity !== null && `Capacity ${schedule.capacity}`}
+              {schedule.bookable_by_student_orgs && " · Bookable by student orgs"}
+            </p>
+          )}
+        </div>
         <button className="secondary-button refresh-button" type="button" onClick={() => void load()} disabled={loading}>↻ Refresh</button>
       </header>
       {availability && <AvailabilitySummary value={availability} time={now.time} />}

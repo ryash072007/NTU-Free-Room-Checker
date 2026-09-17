@@ -7,6 +7,7 @@ from typing import Any
 from ntu_room_checker.calendar.models import DateResolution
 from ntu_room_checker.normalization.venue import normalize_venue
 from ntu_room_checker.queries.calendar_service import DateScheduleResult
+from ntu_room_checker.queries.models import RoomFacility
 
 
 def minute_to_clock(value: int | None) -> str | None:
@@ -51,6 +52,26 @@ def calendar_payload(value: DateResolution) -> dict[str, Any]:
 
 def _interval(value: tuple[int, int]) -> dict[str, str | None]:
     return {"start": minute_to_clock(value[0]), "end": minute_to_clock(value[1])}
+
+
+def room_payload(
+    room: str,
+    location_id: str | None,
+    location_name: str | None,
+    class_types: list[str],
+    facility: RoomFacility | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"id": room, "name": room}
+    if location_id is not None:
+        payload["location_id"] = location_id
+        payload["location_name"] = location_name
+    if class_types:
+        payload["class_types"] = class_types
+    if facility is not None:
+        payload["capacity"] = facility.capacity
+        payload["bookable_by_staff"] = facility.bookable_by_staff
+        payload["bookable_by_student_orgs"] = facility.bookable_by_student_orgs
+    return payload
 
 
 def schedule_payload(room: str, result: DateScheduleResult) -> dict[str, Any]:
