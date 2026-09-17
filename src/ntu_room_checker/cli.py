@@ -13,6 +13,7 @@ from ntu_room_checker.queries import TimetableQueries
 from ntu_room_checker.calendar import CalendarPolicyEngine, default_resolver
 from ntu_room_checker.queries import CalendarTimetableService
 from ntu_room_checker.normalization.time_parser import parse_clock
+from ntu_room_checker.scraper.facility_list import FACILITY_LIST_URL, run_facility_list_scrape
 from ntu_room_checker.scraper.runner import ScrapeConfig, run_scrape
 from ntu_room_checker.scraper.schedule_page import ScheduleLandingPage
 
@@ -81,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
     export = commands.add_parser("export-web-data", help="Compile static frontend timetable data")
     export.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
     export.add_argument("--output", type=Path, default=Path("web/public/data"))
+    facility = commands.add_parser(
+        "scrape-facility-list", help="Scrape NTU's public facility capacity/booking list"
+    )
+    facility.add_argument("--db", type=Path, default=Path("data/ntu_schedule.db"))
+    facility.add_argument("--url", default=FACILITY_LIST_URL)
     return parser
 
 
@@ -202,6 +208,10 @@ def main() -> None:
         from ntu_room_checker.web_export import export_web_data
 
         _print_json(export_web_data(args.db, args.output))
+        return
+    if args.command == "scrape-facility-list":
+        run_id, count = run_facility_list_scrape(args.db, url=args.url)
+        print(f"Facility list run {run_id} stored {count} rows")
         return
     if args.list_programmes:
         with browser_page(headless=args.headless) as page:

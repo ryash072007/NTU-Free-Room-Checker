@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ntu_room_checker.normalization.day_parser import parse_day
+from ntu_room_checker.normalization.facility_join import join_facility_list
 from ntu_room_checker.normalization.storage import NormalizationStorage, fingerprint
 from ntu_room_checker.normalization.time_parser import parse_time
 from ntu_room_checker.normalization.venue import normalize_venue
@@ -24,6 +25,7 @@ class NormalizationSummary:
     canonical_meetings: int
     provenance_links: int
     physical_rooms: int
+    rooms_with_capacity: int
 
 
 CLASS_COLUMNS = (
@@ -152,6 +154,8 @@ def normalize_database(
                                       ON cc.id=m.canonical_class_id WHERE cc.normalization_run_id=?)""",
                         (cursor.lastrowid, normalized, normalization_run_id),
                     )
+
+            _apply_facility_join(c, normalization_run_id)
             storage.complete(normalization_run_id)
             summary = _summary(c, normalization_run_id, source_run_id)
             LOGGER.info(
@@ -165,6 +169,40 @@ def normalize_database(
             raise
 
 
+def _apply_facility_join(c: sqlite3.Connection, normalization_run_id: int) -> None:
+    """Populate capacity/bookable columns for rooms with a confirmed facility-list join.
+
+    A no-op when ``scrape-facility-list`` has never been run against this
+    database: rooms simply keep no capacity fields, which is the correct,
+    non-guessed state until that source is scraped.
+    """
+    has_table = c.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='facility_list_entries'"
+    ).fetchone()
+    if has_table is None:
+        return
+    facility_run = c.execute(
+        "SELECT id FROM facility_list_runs WHERE status='completed' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if facility_run is None:
+        return
+    result = join_facility_list(c, normalization_run_id, int(facility_run[0]))
+    with c:
+        c.executemany(
+            """UPDATE rooms SET capacity=?, bookable_by_staff=?, bookable_by_student_orgs=?
+               WHERE normalization_run_id=? AND venue_display=?""",
+            (
+                (match.capacity, int(match.bookable_by_staff), int(match.bookable_by_student_orgs),
+                 normalization_run_id, match.room)
+                for match in result.matched
+            ),
+        )
+    LOGGER.info(
+        "Facility list join: %d room(s) matched, %d row(s) unmatched",
+        len(result.matched), len(result.unmatched),
+    )
+
+
 def _summary(c: sqlite3.Connection, run_id: int, source_run_id: int) -> NormalizationSummary:
     scalar = lambda query, args=(): int(c.execute(query, args).fetchone()[0])
     return NormalizationSummary(
@@ -175,4 +213,5 @@ def _summary(c: sqlite3.Connection, run_id: int, source_run_id: int) -> Normaliz
         canonical_meetings=scalar("SELECT COUNT(*) FROM class_meetings m JOIN canonical_classes c ON c.id=m.canonical_class_id WHERE c.normalization_run_id=?", (run_id,)),
         provenance_links=scalar("SELECT COUNT(*) FROM meeting_source_entries s JOIN class_meetings m ON m.id=s.meeting_id JOIN canonical_classes c ON c.id=m.canonical_class_id WHERE c.normalization_run_id=?", (run_id,)),
         physical_rooms=scalar("SELECT COUNT(*) FROM rooms WHERE normalization_run_id=?", (run_id,)),
+        rooms_with_capacity=scalar("SELECT COUNT(*) FROM rooms WHERE normalization_run_id=? AND capacity IS NOT NULL", (run_id,)),
     )

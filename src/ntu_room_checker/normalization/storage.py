@@ -114,6 +114,18 @@ class NormalizationStorage:
                 ON meeting_source_entries (raw_schedule_entry_id);
             """
         )
+        self._ensure_room_facility_columns()
+
+    def _ensure_room_facility_columns(self) -> None:
+        # Added alongside the facility-list capacity join; a plain
+        # CREATE TABLE IF NOT EXISTS above would not add these to a rooms
+        # table created before this change, so migrate it explicitly.
+        existing = {row["name"] for row in self.connection.execute("PRAGMA table_info(rooms)")}
+        additions = ("capacity", "bookable_by_staff", "bookable_by_student_orgs")
+        for column in additions:
+            if column not in existing:
+                self.connection.execute(f"ALTER TABLE rooms ADD COLUMN {column} INTEGER")
+        self.connection.commit()
 
     def begin(self, source_run_id: int, *, rebuild: bool) -> tuple[int, bool]:
         existing = self.connection.execute(
