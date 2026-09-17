@@ -181,7 +181,7 @@ cython_debug/
 .cursorindexingignore
 
 # NTU scraper runtime artifacts
-data/
+/data/
 !web/public/data/
 !web/public/data/**
 debug/

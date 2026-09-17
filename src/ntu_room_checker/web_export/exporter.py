@@ -15,7 +15,7 @@ from ntu_room_checker.calendar.policy import TimetableAuthority
 from ntu_room_checker.locations import LOCATIONS, classify_room, rooms_by_location
 from ntu_room_checker.queries import CalendarTimetableService
 from ntu_room_checker.queries.calendar_service import DateScheduleResult
-from ntu_room_checker.web_export.payloads import calendar_payload, schedule_payload
+from ntu_room_checker.web_export.payloads import calendar_payload, room_payload, schedule_payload
 
 SCHEMA_VERSION = 1
 
@@ -105,13 +105,18 @@ def export_web_data(db: Path, output: Path) -> dict[str, Any]:
         with CalendarTimetableService(db) as service:
             rooms = service.queries.physical_rooms(academic_year, semester)
             grouped = rooms_by_location(rooms)
+            class_types = service.queries.class_types_by_room(academic_year, semester)
+            facilities = service.queries.room_facilities_by_room(academic_year, semester)
             room_items = []
             for room in rooms:
                 location = classify_room(room)
-                room_items.append({
-                    "id": room, "name": room,
-                    **({"location_id": location.id, "location_name": location.name} if location else {}),
-                })
+                room_items.append(room_payload(
+                    room,
+                    location.id if location else None,
+                    location.name if location else None,
+                    class_types.get(room, []),
+                    facilities.get(room),
+                ))
             _compact_write(temp / "rooms.json", {
                 "schema_version": SCHEMA_VERSION, "rooms": room_items,
             })

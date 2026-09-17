@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateRoom } from "./evaluator";
+import { evaluateRoom, locationItem } from "./evaluator";
 import type { StaticDay } from "./types";
 
 const day: StaticDay = {
@@ -26,5 +26,24 @@ describe("static availability evaluator", () => {
 
   it("never turns an unparsed meeting into free evidence", () => {
     expect(evaluateRoom("UNKNOWN-DATA", { ...day, unparsed_rooms: ["UNKNOWN-DATA"] }, "12:00", 1).status).toBe("uncertain");
+  });
+
+  it("merges class_types and capacity catalog data into a location room item", () => {
+    const item = locationItem("LHN-TR+15", day, "15:00", 30, {
+      id: "LHN-TR+15", name: "LHN-TR+15", class_types: ["TUT"], capacity: 48,
+      bookable_by_staff: true, bookable_by_student_orgs: false,
+    });
+    expect(item.class_types).toEqual(["TUT"]);
+    expect(item.capacity).toBe(48);
+    expect(item.bookable_by_staff).toBe(true);
+    expect(item.bookable_by_student_orgs).toBe(false);
+  });
+
+  it("defaults catalog fields conservatively when no catalog entry is given", () => {
+    const item = locationItem("LHN-TR+15", day, "15:00", 30);
+    expect(item.class_types).toEqual([]);
+    expect(item.capacity).toBeNull();
+    expect(item.bookable_by_staff).toBeNull();
+    expect(item.bookable_by_student_orgs).toBeNull();
   });
 });

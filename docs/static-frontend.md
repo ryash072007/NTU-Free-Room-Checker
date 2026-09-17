@@ -31,7 +31,9 @@ exist for focused development only; the default is the release-safe workflow.
 
 - `manifest.json`: schema/data format versions, AY/semester, generation time,
   logical source fingerprint, normalization run, supported date range/list, and counts.
-- `rooms.json`: exact canonical physical-room IDs and conservative location metadata.
+- `rooms.json`: exact canonical physical-room IDs, conservative location metadata,
+  timetable-derived room type (`class_types`), and facility-list capacity/booking
+  fields where a confirmed join exists. See `docs/room-capacity.md`.
 - `locations.json`: the four verified location definitions and exact member lists.
 - `days/YYYY-MM-DD.json`: calendar context and authority, per-room actual schedule
   cards, policy-evaluated occupied blocks, uncertain blocks with reason codes, and
