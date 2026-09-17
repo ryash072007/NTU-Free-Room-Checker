@@ -1,17 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocations } from "./api/locations";
+import { getAreaBusyness, getLocations } from "./api/locations";
 import { findFreeRooms } from "./api/rooms";
 import App from "./App";
 import { freeRooms } from "./test/fixtures";
 
-vi.mock("./api/locations", () => ({ getLocations: vi.fn(), getLocationRooms: vi.fn() }));
+vi.mock("./api/locations", () => ({ getLocations: vi.fn(), getLocationRooms: vi.fn(), getAreaBusyness: vi.fn() }));
 vi.mock("./api/rooms", () => ({ findFreeRooms: vi.fn(), getRoomSchedule: vi.fn(), getRoomAvailability: vi.fn(), searchRooms: vi.fn() }));
 
 describe("application routes and navigation", () => {
   beforeEach(() => {
     vi.mocked(getLocations).mockResolvedValue({ locations: [] });
+    vi.mocked(getAreaBusyness).mockResolvedValue([]);
     vi.mocked(findFreeRooms).mockResolvedValue(freeRooms({ rooms: [], uncertain_rooms: [] }));
   });
 

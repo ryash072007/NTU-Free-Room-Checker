@@ -49,7 +49,10 @@ export function freeRooms(overrides: Partial<FreeRoomsResponse> = {}): FreeRooms
     status: "ok",
     reason: "",
     calendar,
-    rooms: [{ room: "LHN-TR+15", free_until: "19:00", free_duration_minutes: 270 }],
+    rooms: [{
+      room: "LHN-TR+15", free_until: "19:00", free_duration_minutes: 270,
+      class_types: [], capacity: null, bookable_by_staff: null, bookable_by_student_orgs: null,
+    }],
     uncertain_rooms: [],
     ...overrides,
   };
@@ -63,6 +66,10 @@ export function schedule(overrides: Partial<RoomScheduleResponse> = {}): RoomSch
     status: "ok",
     reason: "",
     meetings: [meeting],
+    class_types: [],
+    capacity: null,
+    bookable_by_staff: null,
+    bookable_by_student_orgs: null,
     ...overrides,
   };
 }
