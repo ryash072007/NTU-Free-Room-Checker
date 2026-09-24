@@ -63,3 +63,10 @@ class UncertainRoom:
 class RoomSummary:
     id: str
     name: str
+
+
+@dataclass(frozen=True, slots=True)
+class RoomFacility:
+    capacity: int
+    bookable_by_staff: bool
+    bookable_by_student_orgs: bool

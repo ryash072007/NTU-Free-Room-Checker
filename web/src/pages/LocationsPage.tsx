@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { getLocationRooms, getLocations } from "../api/locations";
+import { getAreaBusyness, getLocationRooms, getLocations } from "../api/locations";
 import { findFreeRooms } from "../api/rooms";
+import type { AreaBusyness } from "../api/locations";
 import type { AvailabilityStatus, CalendarContext, LocationItem, LocationRoomItem } from "../api/types";
 import { CalendarContextLine } from "../components/CalendarContextLine";
 import { StatusMessage } from "../components/StatusMessage";
@@ -10,6 +11,7 @@ import { formatDuration, roundedSingaporeDateTime, singaporeDateTime } from "../
 
 const ANYWHERE_ID = "anywhere";
 const DURATIONS = [0, 30, 60, 120, 180] as const;
+const CAPACITIES = [0, 6, 20, 50, 100, 200] as const;
 
 interface BrowseResult {
   location: LocationItem;
@@ -40,6 +42,24 @@ function RoomRow({ room }: { room: LocationRoomItem }) {
   </Link></li>;
 }
 
+function AreaBusynessSummary({ items }: { items: AreaBusyness[] }) {
+  if (!items.length) return null;
+  return <section className="area-busyness" aria-label="Campus busyness">
+    <h2>Campus busyness</h2>
+    <ul>
+      {items.map((item) => {
+        const total = item.free + item.occupied + item.uncertain;
+        const pctFree = total ? Math.round((item.free / total) * 100) : 0;
+        return <li className="area-busyness-row" key={item.id}>
+          <span className="area-busyness-name">{item.name}</span>
+          <span className="area-busyness-bar" aria-hidden="true"><i style={{ width: `${pctFree}%` }} /></span>
+          <span className="area-busyness-detail">{pctFree}% free · {item.free}/{total || item.room_count} rooms</span>
+        </li>;
+      })}
+    </ul>
+  </section>;
+}
+
 function bestAvailability(left: LocationRoomItem, right: LocationRoomItem) {
   const rank = (room: LocationRoomItem) => room.status === "free" ? 0 : room.status === "occupied" ? 1 : 2;
   const rankDifference = rank(left) - rank(right);
@@ -68,6 +88,10 @@ export function LocationsPage() {
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<"best" | "name">("best");
   const [filter, setFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [capacity, setCapacity] = useState(0);
+  const [studentOrgOnly, setStudentOrgOnly] = useState(false);
+  const [busyness, setBusyness] = useState<AreaBusyness[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,6 +99,13 @@ export function LocationsPage() {
       .catch((caught) => { if (!(caught instanceof DOMException)) setError(errorMessage(caught)); });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getAreaBusyness({ date, time }, controller.signal).then(setBusyness)
+      .catch((caught) => { if (!(caught instanceof DOMException)) setBusyness([]); });
+    return () => controller.abort();
+  }, [date, time]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,20 +131,28 @@ export function LocationsPage() {
     return () => controller.abort();
   }, [locationId, date, time, duration]);
 
+  const typeOptions = useMemo(
+    () => Array.from(new Set((result?.rooms ?? []).flatMap((room) => room.class_types))).sort(),
+    [result],
+  );
   const visibleRooms = useMemo(() => {
     const needle = filter.trim().toUpperCase();
     let values = (result?.rooms ?? []).filter((room) => !needle || room.room.toUpperCase().includes(needle));
     if (locationId !== ANYWHERE_ID && duration > 0) {
       values = values.filter((room) => room.status !== "free" || room.free_duration_minutes === null || room.free_duration_minutes >= duration);
     }
+    if (typeFilter) values = values.filter((room) => room.class_types.includes(typeFilter));
+    if (capacity > 0) values = values.filter((room) => room.capacity !== null && room.capacity >= capacity);
+    if (studentOrgOnly) values = values.filter((room) => room.bookable_by_student_orgs === true);
     return [...values].sort(sort === "name" ? (a, b) => a.room.localeCompare(b.room) : bestAvailability);
-  }, [result, filter, sort, locationId, duration]);
+  }, [result, filter, sort, locationId, duration, typeFilter, capacity, studentOrgOnly]);
   const groups = [["free", "Free"], ["occupied", "In use"], ["uncertain", "Uncertain"]] as const;
   const useNow = () => { const current = roundedSingaporeDateTime(); setDate(current.date); setTime(current.time); };
 
   return <main className="page locations-page">
     <section className="finder-heading"><div className="eyebrow">Campus spaces</div><h1>Browse rooms</h1>
       <p className="intro">Choose an area and see usable rooms now, then tap one for its full schedule.</p></section>
+    <AreaBusynessSummary items={busyness} />
     <section className="location-controls" aria-label="Browse controls">
       <label>Location<select aria-label="Location" value={locationId} onChange={(event) => setLocationId(event.target.value)}>
         <option value={ANYWHERE_ID}>Anywhere on campus</option>
@@ -133,6 +172,16 @@ export function LocationsPage() {
         <label className="sort-control">Sort<select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="best">Best availability</option><option value="name">Room name</option></select></label></div>
       {result.status !== "ok" ? <StatusMessage status={result.status} reason={result.reason} calendar={result.calendar} /> : <>
         <label className="room-filter">Filter rooms<input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="e.g. LHN-TR+17" /></label>
+        <div className="filter-row">
+          <label>Type<select aria-label="Room type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+            <option value="">Any</option>
+            {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select></label>
+          <label>Fits<select aria-label="Minimum capacity" value={capacity} onChange={(event) => setCapacity(Number(event.target.value))}>
+            {CAPACITIES.map((value) => <option key={value} value={value}>{value === 0 ? "Any" : `${value}+`}</option>)}
+          </select></label>
+          <label className="filter-toggle"><input type="checkbox" checked={studentOrgOnly} onChange={(event) => setStudentOrgOnly(event.target.checked)} /> Bookable by student orgs</label>
+        </div>
         {groups.map(([status, label]) => { const matching = visibleRooms.filter((room) => room.status === status); return matching.length ? <section className="room-status-group" key={status}><h3>{label} <span>{matching.length}</span></h3><ul>{matching.map((room) => <RoomRow key={room.room} room={room} />)}</ul></section> : null; })}
         {!visibleRooms.length && <div className="empty-state">No rooms match these filters.</div>}
       </>}

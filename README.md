@@ -39,6 +39,10 @@ python -m ntu_room_checker scrape --list-programmes
 
 # Scrape and normalize
 python -m ntu_room_checker scrape --db data/ntu_schedule.db
+
+# Optional: room capacity/booking-eligibility source (see docs/room-capacity.md)
+python -m ntu_room_checker scrape-facility-list --db data/ntu_schedule.db
+
 python -m ntu_room_checker normalize --db data/ntu_schedule.db --rebuild --stats
 
 # Generate the tracked static dataset

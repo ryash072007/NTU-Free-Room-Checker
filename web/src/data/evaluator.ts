@@ -1,5 +1,5 @@
 import type { LocationRoomItem, RoomAvailabilityResponse } from "../api/types";
-import type { StaticDay, StaticDayRoom } from "./types";
+import type { StaticDay, StaticDayRoom, StaticRoom } from "./types";
 
 export const overlaps = (start: number, end: number, requestedStart: number, requestedEnd: number) =>
   start < requestedEnd && end > requestedStart;
@@ -35,9 +35,11 @@ export function evaluateRoom(room: string, day: StaticDay, time: string, duratio
     occupied_intervals: [], uncertain_intervals: [], reason_codes: [], reasons: [] };
 }
 
-export function locationItem(room: string, day: StaticDay, time: string, duration: number): LocationRoomItem {
+export function locationItem(room: string, day: StaticDay, time: string, duration: number, catalog?: StaticRoom): LocationRoomItem {
   const result = evaluateRoom(room, day, time, duration);
   const end = result.occupied_intervals.reduce((latest, item) => Math.max(latest, clockToMinute(item.end)), -1);
   return { room, status: result.status, is_free: result.is_free, free_until: result.free_until,
-    free_duration_minutes: result.free_duration_minutes, available_from: end < 0 ? null : minuteToClock(end), reason_codes: result.reason_codes, reasons: result.reasons };
+    free_duration_minutes: result.free_duration_minutes, available_from: end < 0 ? null : minuteToClock(end), reason_codes: result.reason_codes, reasons: result.reasons,
+    class_types: catalog?.class_types ?? [], capacity: catalog?.capacity ?? null,
+    bookable_by_staff: catalog?.bookable_by_staff ?? null, bookable_by_student_orgs: catalog?.bookable_by_student_orgs ?? null };
 }
